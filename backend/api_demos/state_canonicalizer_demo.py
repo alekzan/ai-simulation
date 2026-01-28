@@ -40,7 +40,7 @@ STRICT RULES
 
 MATCHING RULES
 Inventory:
-- If a failed inventory update looks like it references an existing item (example: reason/use are null, or it is a decrement or a change),
+- If a failed inventory update looks like it references an existing item (example: reason/note are null, or it is a decrement or a change),
   then its name MUST be replaced with a canonical inventory name.
 - Match using:
   1) exact match
@@ -50,7 +50,7 @@ Inventory:
 - If ambiguous, choose the safest best match and add a warning explaining ambiguity.
 
 New item exception:
-- If the update clearly introduces a NEW item (reason or use present AND the item is not in canonical list),
+- If the update clearly introduces a NEW item (reason or note present AND the item is not in canonical list),
   you may keep it unchanged. Add no fix unless you are confident it is a renamed existing item.
 
 Skills:
@@ -87,7 +87,7 @@ failed_inventory_updates = [
         name="Knife",          # wrong name
         new_count=1,           # director wants final count 1 (from 2 -> 1)
         reason=None,
-        use=None,
+        note=None,
         added_turn=None,
         image_prompt=None,
     )

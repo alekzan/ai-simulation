@@ -9,8 +9,8 @@ This file contains Pydantic models shared across scripts.
 
 from __future__ import annotations
 
-from typing import List, Literal
-from pydantic import BaseModel, Field, Optional, Dict
+from typing import Dict, List, Literal, Optional
+from pydantic import BaseModel, Field
 
 
 
@@ -45,6 +45,26 @@ class TitleScreenSelectorOutput(BaseModel):
 # SCHEMA BLOCK: INITIAL SCRIPT (backend/initial_script.py)
 # ===========================================================================
 
+# Shared schemas for action options + hints across outputs.
+
+class ActionOption(BaseModel):
+    action: str = Field(
+        description="First-person action only. Must NOT declare world changes or outcomes."
+    )
+
+
+class Hint(BaseModel):
+    text: str = Field(
+        description="One very short hint line (max ~12 words). May be useful or not."
+    )
+
+
+class Hints(BaseModel):
+    lines: List[Hint] = Field(
+        description="Exactly 3 short hint lines."
+    )
+
+
 # These schemas define the structured JSON output for the Dramatic Architect
 # initialization call: concept, internal plot spine, anchor events, endings,
 # initial playable scene, and universal skills.
@@ -57,11 +77,6 @@ class AnchorEvent(BaseModel):
 class EndingType(BaseModel):
     ending: str = Field(
         description="A distinct ending type. Mutually exclusive vs others. No conditions."
-    )
-
-class ActionOption(BaseModel):
-    action: str = Field(
-        description="First-person action only. Must NOT declare world changes or outcomes."
     )
 
 class InitialScene(BaseModel):
@@ -91,17 +106,6 @@ class Skill(BaseModel):
     explanation: str = Field(
         description="Brief definition of what actions this skill covers, consistent with its domain."
     )
-
-class Hint(BaseModel):
-    text: str = Field(
-        description="One very short hint line (max ~12 words). May be useful or not."
-    )
-
-class Hints(BaseModel):
-    lines: List[Hint] = Field(
-        description="Exactly 3 short hint lines."
-    )
-
 
 class InitialScriptOutput(BaseModel):
     main_dramatic_concept: str = Field(
@@ -143,15 +147,6 @@ class InitialScriptOutput(BaseModel):
 # These schemas define the structured JSON output for the Narrative Director call:
 # next scene, inventory changes, skill change, narrative alignment, and ending flags.
 
-# Note: This block assumes BaseModel, Field, List, Optional, Literal are already
-# imported in backend/schemas.py.
-
-
-class ActionOption(BaseModel):
-    action: str = Field(
-        description="First-person action only. Must NOT declare world changes or outcomes."
-    )
-
 class NextScene(BaseModel):
     text_story: str = Field(
         description="3–4 short paragraphs. Must increase tension, reveal partial new info, and end with a pending decision."
@@ -172,17 +167,6 @@ class NextScene(BaseModel):
         default=None,
         description="Only if music_action=CHANGE. One concise instrumental prompt that matches the NEW mood; no words/lyrics."
     )
-     
-class Hint(BaseModel):
-    text: str = Field(
-        description="One very short hint line (max ~12 words). May be useful or not."
-    )
-
-class Hints(BaseModel):
-    lines: List[Hint] = Field(
-        description="Exactly 3 short hint lines."
-    )
-
 class InventoryChange(BaseModel):
     name: str = Field(description="Item name.")
     new_count: int = Field(description="Final count after this turn (0 means none).")
@@ -328,9 +312,9 @@ class FailedInventoryUpdate(BaseModel):
         default=None,
         description="Short explanation from the Director for why the item was added or why its count changed (only present when item is new or increases from 0).",
     )
-    use: Optional[str] = Field(
+    note: Optional[str] = Field(
         default=None,
-        description="Hint for how the item might be useful in the story (non-deterministic guidance, not an instruction). Only present when item is new or increases from 0.",
+        description="Non-prescriptive hint about what the item is, why it matters, or how it might help. No instructions. Only present when item is new or increases from 0.",
     )
     added_turn: Optional[int] = Field(
         default=None,
