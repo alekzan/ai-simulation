@@ -7,35 +7,21 @@
 #
 # NOTE: This demo is intentionally simple and hard-coded to teach the API usage pattern.
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 import json
 from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field
-from google import genai
 from google.genai import types
+
+from backend.clients import get_genai_client, get_thinking_config
+from backend.prompts.story_memory_summarizer import SYSTEM_INSTRUCTION
 from backend.schemas import StoryMemorySummarizerInput, StoryMemorySummarizerOutput
 
-
-# ===========================================================================
-# PROMPT (system_instruction)
-# ===========================================================================
-
-SYSTEM_INSTRUCTION = """
-You are the Story Memory Summarizer for an AI-driven simulation.
-
-GOAL
-Compress a set of scenes into a bounded, reliable "story_memory" object that can be fed to another model.
-
-RULES
-- Output ONLY valid JSON matching the provided schema.
-- Keep summary short: 6–12 lines max, compact sentences, no headings, no bullet characters.
-- key_facts must be timeless truths that should remain consistent.
-- open_threads must be truly unresolved.
-- known_entities: include only important entities; each with a one-line note.
-- last_summarized_scene must equal the max number_of_scene in scenes_to_summarize.
-- If current_story_memory is provided, you may UPDATE/REFRESH it, but do NOT expand indefinitely.
-  Prefer rewriting to remain compact.
-""".strip()
 
 
 # ===========================================================================
@@ -120,7 +106,7 @@ DEMO_INPUT = {
 
 
 
-client = genai.Client()
+client = get_genai_client()
 
 parsed = StoryMemorySummarizerInput.model_validate(DEMO_INPUT)
 
@@ -130,6 +116,7 @@ response = client.models.generate_content(
         system_instruction=SYSTEM_INSTRUCTION,
         response_mime_type="application/json",
         response_json_schema=StoryMemorySummarizerOutput.model_json_schema(),
+        thinking_config=get_thinking_config(),  # "high" for production
     ),
     contents=json.dumps(parsed.model_dump(), ensure_ascii=False),
 )

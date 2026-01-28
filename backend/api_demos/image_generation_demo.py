@@ -1,5 +1,10 @@
 # backend/api_demos/image_generation_demo.py
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 """
 DEMO FILE: IMAGE GENERATION + IMAGE EDIT (SAME CHAT SESSION)
 

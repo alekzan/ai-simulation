@@ -1,40 +1,30 @@
 # backend/api_demos/title_screen_selector_demo.py
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 import json
-from google import genai
+
+from google.genai import types
+
+from backend.clients import get_genai_client, get_thinking_config
+from backend.prompts.title_screen_selector import PROMPT
 from backend.schemas import TitleScreenSelectorOutput
 
 
-PROMPT = """
-You are the Title Screen Selector for an AI-driven interactive fiction game.
-
-GOAL
-Generate exactly 3 distinct, highly hooky game story concepts that feel exciting immediately.
-
-RULES
-- Provide exactly 3 ideas.
-- Each title must be 2–6 words.
-- Each one_liner must be ONE single line (no line breaks), and must imply a problem or danger.
-- The three ideas must be diverse in setting/genre (avoid overlap).
-- Do not include lists, bullets, or commentary.
-
-COVER IMAGE PROMPT RULES
-- For each idea, provide a cover_image_prompt that looks like a premium game cover.
-- The prompt must specify: style, mood, lighting, composition, and key elements.
-- No text in the image. No logos. No watermarks. No readable typography.
-""".strip()
-
-
 def main() -> None:
-    client = genai.Client()
+    client = get_genai_client()
 
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
         contents=PROMPT,
-        config={
-            "response_mime_type": "application/json",
-            "response_json_schema": TitleScreenSelectorOutput.model_json_schema(),
-        },
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_json_schema=TitleScreenSelectorOutput.model_json_schema(),
+            thinking_config=get_thinking_config(),  # "high" for production
+        ),
     )
 
     # Print tokens (guard in case usage_metadata is missing)

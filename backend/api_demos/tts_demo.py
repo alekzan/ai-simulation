@@ -4,6 +4,11 @@ from google.genai import types
 import wave
 from pathlib import Path
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 def wave_file(filename, pcm, channels=1, rate=24000, sample_width=2):
     with wave.open(str(filename), "wb") as wf:
         wf.setnchannels(channels)

@@ -4,68 +4,26 @@
 # Used ONLY when deterministic backend logic fails to apply an inventory/skill update
 # because the Director output contains non-canonical names (e.g., "Knife" vs "Large knife").
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 import json
 from typing import Any, Dict, List, Optional
 
-from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from typing import Literal
 
 
 # Example import line (from any backend module)
+from backend.clients import get_genai_client, get_thinking_config
+from backend.prompts.state_canonicalizer import STATE_CANONICALIZER_SYSTEM
 from backend.schemas import FailedInventoryUpdate, FailedSkillUpdate, CanonicalizerInput, CanonicalizerOutput
 
 
-# =========================
-# Canonicalizer system prompt
-# =========================
-
-STATE_CANONICALIZER_SYSTEM = """
-You are the State Canonicalizer.
-
-You are called ONLY when the backend failed to apply a state update because a name did not match the canonical state.
-
-GOAL
-Given:
-- canonical inventory names
-- canonical skill names by domain
-- the failed updates (inventory and/or skill)
-Return the same updates but corrected so that their names match the canonical state.
-
-STRICT RULES
-- Output ONLY valid JSON matching the provided schema. No commentary.
-- Do NOT change counts, deltas, new_value, reasons, or other fields unless required for schema validity.
-- Your job is name canonicalization only.
-
-MATCHING RULES
-Inventory:
-- If a failed inventory update looks like it references an existing item (example: reason/note are null, or it is a decrement or a change),
-  then its name MUST be replaced with a canonical inventory name.
-- Match using:
-  1) exact match
-  2) case-insensitive match
-  3) singular/plural normalization and punctuation normalization
-  4) semantic match ONLY if unambiguous
-- If ambiguous, choose the safest best match and add a warning explaining ambiguity.
-
-New item exception:
-- If the update clearly introduces a NEW item (reason or note present AND the item is not in canonical list),
-  you may keep it unchanged. Add no fix unless you are confident it is a renamed existing item.
-
-Skills:
-- If a failed skill update is provided, its name MUST be replaced with a canonical skill name within the same domain.
-- Match using exact, case-insensitive, normalization, then semantic match.
-- If ambiguous, keep the original and add a warning.
-
-CONTEXT
-- Only use scene_excerpt and player_action if provided, and only to break ties.
-- If context is not provided, resolve strictly using the canonical lists.
-""".strip()
-
-
-
-client = genai.Client()
+client = get_genai_client()
 
 # -------------------------
 # Example: backend detected "key not found" for inventory + skill
@@ -117,6 +75,7 @@ response = client.models.generate_content(
         system_instruction=STATE_CANONICALIZER_SYSTEM,
         response_mime_type="application/json",
         response_json_schema=CanonicalizerOutput.model_json_schema(),
+        thinking_config=get_thinking_config(),  # "high" for production
     ),
     contents=json.dumps(payload.model_dump(), ensure_ascii=False),
 )

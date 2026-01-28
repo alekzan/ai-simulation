@@ -3,6 +3,11 @@ import asyncio
 import wave
 from pathlib import Path
 
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 from google import genai
 from google.genai import types
 
