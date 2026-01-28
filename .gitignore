@@ -1,0 +1,61 @@
+# Ignore red-tagged folders
+MENSAJES/
+RESUMEN/
+
+# Ignore environment and Python cache files
+.env
+.env.production
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Ignore Jupyter Notebook files
+*.ipynb
+*.pyc
+
+
+# Ignore everything inside the graphs folder but keep the folder itself
+data/graphs/*
+data/graphs_restaurant/*
+!data/graphs/.gitkeep
+
+# Ignore the specific database file
+data/whatsapp_crm.db
+
+# Allow other folders inside the data directory
+!data/
+!data/chroma_vectorstore_informacion_de_tienda/
+!data/chroma_vectorstore_product_data/
+!data/CSV/
+!data/MD/
+!data/PDF/
+!data/SQLite/
+
+# Ignore Flask log file
+flask-app.log
+data_utilities.py
+.venv/
+# EXCEPTION: keep this one
+!agents_vertex_test.ipynbkeys/
+*.json
+AGENTS.md
+ROADMAP.md
+progress.md
+PRD.md
+
+# Allow demo artifacts to be committed
+!demos/
+!demos/**
+!demos/**/*.json
+
+# Loan Control Tower workspaces (generated artifacts)
+data/workspaces/
+data/**/workspaces/
+
+*.sqlite
+*.db
+
+node_modules/
+dist/
+build/
