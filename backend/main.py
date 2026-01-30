@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from backend.db import init_db
 from backend.routes.title import router as title_router
+from backend.routes.init import router as init_router
 
 
 def load_env() -> None:
@@ -22,6 +23,7 @@ def startup() -> None:
     init_db()
 
 app.include_router(title_router)
+app.include_router(init_router)
 
 
 @app.get("/health")
