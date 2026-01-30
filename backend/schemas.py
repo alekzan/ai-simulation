@@ -31,7 +31,7 @@ class TitleIdea(BaseModel):
         description=(
             "Prompt for a premium game cover image. Must specify style, mood, lighting, "
             "composition, key elements. No text, no logos, no watermarks. "
-            "No readable typography."
+            "No readable typography, letters, numbers, signage, or UI."
         )
     )
 
@@ -84,7 +84,7 @@ class InitialScene(BaseModel):
         description="Initial scene narrative shown to the player. Must end with a pending decision."
     )
     image_prompt: str = Field(
-        description="Prompt for a reference image matching the scene. No text, no logos, no watermarks."
+        description="Prompt for a reference image matching the scene. No text, no logos, no watermarks, no letters, no numbers, no signage, no UI."
     )
     action_options: List[ActionOption] = Field(
         description="Exactly 3 suggested first-person actions."
@@ -155,7 +155,7 @@ class NextScene(BaseModel):
         description="Use 'video' only if is_it_ending is true, otherwise 'image'."
     )
     media_prompt: str = Field(
-        description="Prompt for the reference image (or ending video). No text, no logos, no watermarks."
+        description="Prompt for the reference image (or ending video). No text, no logos, no watermarks, no letters, no numbers, no signage, no UI."
     )
     action_options: List[ActionOption] = Field(
         description="Exactly 3 suggested first-person actions: one safe, one risky, one unexpected."
@@ -187,7 +187,7 @@ class InventoryChange(BaseModel):
         description=(
         "Prompt to generate a clean, high-quality image of THIS inventory item only "
         "(single item product-style or prop-style). "
-        "No text, no logos, no watermarks. "
+        "No text, no logos, no watermarks, no letters, no numbers, no signage, no UI. "
         "Only include when item count increases from 0 or the item is new."
         )
     )

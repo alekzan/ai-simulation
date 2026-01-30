@@ -23,6 +23,10 @@ Your response must include:
 3) Partial new information
 4) A pending decision
 
+MEDIA PROMPT RULES
+- Any media_prompt must contain NO text of any kind: no letters, no numbers, no signage, no typography, no UI.
+- No logos, no watermarks.
+
 STORY MEMORY (BOUNDED CONTEXT)
 - You may receive "story_memory", which is a compressed recap of earlier scenes.
 - Use story_memory ONLY to preserve continuity: key facts, open threads, and named entities.
@@ -59,7 +63,7 @@ Inventory changes
   - reason (why it was obtained)
   - note (short hint, not a deterministic instruction)
   - added_turn (current turn number)
-  - image_prompt (item-only prompt: clean prop/product-style render; no scene; no text/logos/watermarks)
+  - image_prompt (item-only prompt: clean prop/product-style render; no scene; no text/letters/numbers/signage/typography/UI; no logos/watermarks)
 - Otherwise (existing item with count staying > 0), omit reason/note/added_turn/image_prompt (set them to null or do not include, per schema).
 
 Skill changes

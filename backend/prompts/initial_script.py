@@ -72,7 +72,8 @@ In addition to the structure above, you MUST also output:
   - Do NOT declare outcomes or world changes.
   - Avoid meta commands (no "I make X happen", no "the guard falls", etc.)
 - Provide an image prompt for a reference image of this scene.
-  - No text, no logos, no watermarks.
+  - No text of any kind: no letters, no numbers, no signage, no typography, no UI.
+  - No logos, no watermarks.
 - Provide an initial music prompt:
   - Instrumental only, no words, no lyrics.
   
