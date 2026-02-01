@@ -78,7 +78,7 @@ def generate_video_from_first_frame(
 def main() -> None:
     client = genai.Client()
 
-    out_dir = Path("video_tests")
+    out_dir = Path("media") / "video"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # -------------------------
@@ -110,7 +110,7 @@ def main() -> None:
         "Keep the same noir mood, black and white, dramatic shadows, subtle film grain."
     )
 
-    img_path = Path("image_tests") / "scene_1_v3.png"
+    img_path = Path("media") / "images" / "scene_1_v3.png"
     first_frame_b = load_first_frame_from_file(img_path)
 
     op_b = generate_video_from_first_frame(

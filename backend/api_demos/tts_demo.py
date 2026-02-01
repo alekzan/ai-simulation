@@ -45,7 +45,7 @@ response = client.models.generate_content(
 
 data = response.candidates[0].content.parts[0].inline_data.data
 
-out_dir = Path("audio_tests")
+out_dir = Path("media") / "audio"
 out_dir.mkdir(parents=True, exist_ok=True)
 
 file_path = out_dir / "narrator_charon.wav"

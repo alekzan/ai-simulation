@@ -74,7 +74,7 @@ def main() -> None:
 
     response1 = chat.send_message(message)
     print_usage(response1)
-    save_first_image(response1, Path("image_tests") / "scene_1_v1.png")
+    save_first_image(response1, Path("media") / "images" / "scene_1_v1.png")
 
     # 2) Edit the image in the same chat session (deeper change)
     edit_message = """
@@ -93,7 +93,7 @@ Keep the same lone man (trench coat + fedora) as the main subject.
     )
 
     print_usage(response2)
-    save_first_image(response2, Path("image_tests") / "scene_2_v1.png")
+    save_first_image(response2, Path("media") / "images" / "scene_2_v1.png")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal
+from concurrent.futures import ThreadPoolExecutor
+from typing import Literal, Optional, Dict, Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import create_session
+from backend.media import generate_music, generate_scene_image, generate_tts
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
 from backend.schemas import InitialScriptOutput
 from backend.validation import StructuredOutputValidationError, validate_model_json
@@ -62,6 +64,38 @@ def init_game(payload: InitRequest) -> dict:
     initial_scene = parsed.initial_scene
     initial_scene_dict = _dump_model(initial_scene)
 
+    # Generate initial media in parallel
+    media_paths: Dict[str, Optional[str]] = {"image_path": None, "tts_path": None, "music_path": None}
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures: Dict[str, Any] = {}
+            futures["image_path"] = executor.submit(
+                generate_scene_image,
+                initial_scene.image_prompt,
+                "scene_1.png",
+            )
+            futures["tts_path"] = executor.submit(
+                generate_tts,
+                initial_scene.text_story,
+                "tts_1.wav",
+            )
+            futures["music_path"] = executor.submit(
+                generate_music,
+                initial_scene.music_prompt,
+                "music_1.wav",
+            )
+            for key, future in futures.items():
+                result = future.result()
+                media_paths[key] = str(result) if result is not None else None
+    except Exception as exc:  # pragma: no cover - surface as API error
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_type": "MEDIA_GENERATION_FAILED",
+                "message": str(exc),
+            },
+        )
+
     session_state = {
         "main_dramatic_concept": parsed.main_dramatic_concept,
         "core_plot": parsed.core_plot,
@@ -77,6 +111,12 @@ def init_game(payload: InitRequest) -> dict:
                 "number_of_scene": 1,
                 "text_story": initial_scene.text_story,
                 "selected_action": None,
+                "media": {
+                    "media_type": "image",
+                    "image_path": media_paths["image_path"],
+                    "tts_path": media_paths["tts_path"],
+                    "music_path": media_paths["music_path"],
+                },
             }
         ],
         "skills": [_dump_model(skill) for skill in parsed.skills],
@@ -93,4 +133,5 @@ def init_game(payload: InitRequest) -> dict:
         "session_id": session_id,
         "initial_script": parsed_dict,
         "initial_scene": initial_scene_dict,
+        "initial_media": media_paths,
     }

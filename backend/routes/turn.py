@@ -1,23 +1,28 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import JSONResponse
 from google.genai import types
 from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
+from backend.media import generate_music, generate_scene_image, generate_tts
 from backend.prompts.narrator_director import STATIC_PROMPT
 from backend.prompts.state_canonicalizer import STATE_CANONICALIZER_SYSTEM
+from backend.prompts.story_memory_summarizer import SYSTEM_INSTRUCTION as STORY_MEMORY_SYSTEM
 from backend.schemas import (
     CanonicalizerInput,
     CanonicalizerOutput,
     DirectorNarratorOutput,
     FailedInventoryUpdate,
     FailedSkillUpdate,
+    StoryMemorySummarizerInput,
+    StoryMemorySummarizerOutput,
 )
 from backend.validation import (
     StructuredOutputValidationError,
@@ -196,8 +201,61 @@ def _run_canonicalizer(
     return parsed
 
 
+def _summarize_story_memory(session_id: str) -> None:
+    record = get_session(session_id)
+    if record is None:
+        return
+
+    state = record.state_json
+    if state.get("story_memory"):
+        return
+
+    previous_scenes = state.get("previous_scenes", [])
+    if len(previous_scenes) < 10:
+        return
+
+    scenes_to_summarize = []
+    for scene in previous_scenes[:10]:
+        scenes_to_summarize.append(
+            {
+                "number_of_scene": scene.get("number_of_scene"),
+                "text_story": scene.get("text_story"),
+                "selected_action": scene.get("selected_action") or "",
+            }
+        )
+
+    payload = StoryMemorySummarizerInput(
+        main_dramatic_concept=state["main_dramatic_concept"],
+        core_plot=state["core_plot"],
+        anchor_events=state.get("anchor_events"),
+        endings=state.get("endings"),
+        scenes_to_summarize=scenes_to_summarize,
+        current_story_memory=None,
+    )
+
+    client = get_genai_client()
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        config=types.GenerateContentConfig(
+            system_instruction=STORY_MEMORY_SYSTEM,
+            response_mime_type="application/json",
+            response_json_schema=StoryMemorySummarizerOutput.model_json_schema(),
+            thinking_config=get_thinking_config(),
+        ),
+        contents=json.dumps(_dump_model(payload), ensure_ascii=False),
+    )
+
+    try:
+        parsed = validate_model_json(response.text, StoryMemorySummarizerOutput)
+    except StructuredOutputValidationError:
+        return
+
+    state["story_memory"] = _dump_model(parsed.story_memory)
+    save_session(session_id, state)
+
+
 @router.post("/turn")
-def next_turn(payload: TurnRequest) -> dict:
+def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
     record = get_session(payload.session_id)
     if record is None:
         return JSONResponse(
@@ -290,21 +348,80 @@ def next_turn(payload: TurnRequest) -> dict:
     if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
         state["current_music"] = parsed.next_scene.music_prompt
 
+    # Generate media in parallel
+    media_paths: Dict[str, Optional[str]] = {"image_path": None, "tts_path": None, "music_path": None}
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures: Dict[str, Any] = {}
+            if parsed.next_scene.media_type == "image":
+                futures["image_path"] = executor.submit(
+                    generate_scene_image,
+                    parsed.next_scene.media_prompt,
+                    f"scene_{next_turn_number}.png",
+                )
+            futures["tts_path"] = executor.submit(
+                generate_tts,
+                parsed.next_scene.text_story,
+                f"tts_{next_turn_number}.wav",
+            )
+            if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
+                futures["music_path"] = executor.submit(
+                    generate_music,
+                    parsed.next_scene.music_prompt,
+                    f"music_{next_turn_number}.wav",
+                )
+
+            for key, future in futures.items():
+                result = future.result()
+                media_paths[key] = str(result) if result is not None else None
+    except Exception as exc:  # pragma: no cover - surface as API error
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_type": "MEDIA_GENERATION_FAILED",
+                "message": str(exc),
+            },
+        )
+
     # Append the newly generated scene with no selected action yet
     previous_scenes.append(
         {
             "number_of_scene": next_turn_number,
             "text_story": parsed.next_scene.text_story,
             "selected_action": None,
+            "media": {
+                "media_type": parsed.next_scene.media_type,
+                "image_path": media_paths["image_path"],
+                "tts_path": media_paths["tts_path"],
+                "music_path": media_paths["music_path"],
+            },
         }
     )
     state["previous_scenes"] = previous_scenes
 
     save_session(payload.session_id, state)
 
+    if next_turn_number == 13:
+        background_tasks.add_task(_summarize_story_memory, payload.session_id)
+
     return {
         "session_id": payload.session_id,
         "turn_number": next_turn_number,
+        "scene": {
+            "text_story": parsed.next_scene.text_story,
+            "action_options": _dump_model(parsed.next_scene).get("action_options", []),
+            "media_type": parsed.next_scene.media_type,
+            "media_prompt": parsed.next_scene.media_prompt,
+            "image_path": media_paths["image_path"],
+            "tts_path": media_paths["tts_path"],
+            "music_action": parsed.next_scene.music_action,
+            "music_prompt": parsed.next_scene.music_prompt,
+            "music_path": media_paths["music_path"],
+        },
+        "hints": _dump_model(parsed.hints),
+        "narrative_alignment": _dump_model(parsed.narrative_alignment),
+        "is_game_over": parsed.is_game_over,
+        "is_it_ending": parsed.is_it_ending,
         "director_output": _dump_model(parsed),
         "inventory": updated_inventory,
         "skills": updated_skills,

@@ -12,13 +12,21 @@ from backend.clients import get_genai_client
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
-IMAGE_DIR = ROOT_DIR / "image_tests"
-AUDIO_DIR = ROOT_DIR / "audio_tests"
-VIDEO_DIR = ROOT_DIR / "video_tests"
+MEDIA_DIR = ROOT_DIR / "media"
+IMAGE_DIR = MEDIA_DIR / "images"
+AUDIO_DIR = MEDIA_DIR / "audio"
+VIDEO_DIR = MEDIA_DIR / "video"
 
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _relative_path(path: Path) -> Path:
+    try:
+        return path.relative_to(ROOT_DIR)
+    except ValueError:
+        return path
 
 
 def generate_scene_image(prompt: str, filename: str = "scene.png") -> Path:
@@ -45,7 +53,7 @@ def generate_scene_image(prompt: str, filename: str = "scene.png") -> Path:
         img = part.as_image()
         if img is not None:
             img.save(str(out_path))
-            return out_path
+            return _relative_path(out_path)
 
     raise RuntimeError("No image found in response.parts")
 
@@ -85,7 +93,7 @@ def generate_tts(text: str, filename: str = "narrator.wav") -> Path:
     _ensure_dir(AUDIO_DIR)
     out_path = AUDIO_DIR / filename
     _write_wav(out_path, audio_data)
-    return out_path
+    return _relative_path(out_path)
 
 
 async def _generate_music_async(prompt: str, filename: str = "music.wav", duration_seconds: int = 20) -> Path:
@@ -115,19 +123,23 @@ async def _generate_music_async(prompt: str, filename: str = "music.wav", durati
 
         await session.play()
 
-        async for chunk in session.receive():
-            if chunk is None or chunk.data is None:
-                continue
-            pcm_buffer.extend(chunk.data)
-            if len(pcm_buffer) >= target_bytes:
-                break
+        while len(pcm_buffer) < target_bytes:
+            async for message in session.receive():
+                sc = getattr(message, "server_content", None)
+                if not sc or not getattr(sc, "audio_chunks", None):
+                    continue
+                chunk = sc.audio_chunks[0].data
+                if chunk:
+                    pcm_buffer.extend(chunk)
+                if len(pcm_buffer) >= target_bytes:
+                    break
 
         await session.stop()
 
     _ensure_dir(AUDIO_DIR)
     out_path = AUDIO_DIR / filename
     _write_wav(out_path, bytes(pcm_buffer), channels=channels, rate=sample_rate, sample_width=sample_width)
-    return out_path
+    return _relative_path(out_path)
 
 
 def generate_music(prompt: str, filename: str = "music.wav", duration_seconds: int = 20) -> Path:
@@ -192,4 +204,4 @@ def generate_ending_video(
     client.files.download(file=video_obj.video)
     video_obj.video.save(str(out_path))
 
-    return out_path
+    return _relative_path(out_path)
