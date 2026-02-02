@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Driven Simulation Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/frontend/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="ambient-base"></div>
+      <div class="scanlines"></div>
+
+      <header id="topbar" class="topbar hidden">
+        <div class="brand">
+          <div>
+            <div class="brand-title">Reality Analysis Console</div>
+            <div class="brand-subtitle">Session <span id="session-id">--</span></div>
+          </div>
+        </div>
+        <div class="status-grid">
+          <div class="status-item">
+            <span>Tracking</span>
+            <strong id="turn-counter">Turn 1</strong>
+          </div>
+          <div class="status-item">
+            <span>Music</span>
+            <strong id="music-state">Stable</strong>
+          </div>
+        </div>
+        <div class="top-controls">
+          <button id="tts-toggle" class="toggle">TTS: On</button>
+          <button id="music-toggle" class="toggle">Music: On</button>
+          <button id="back-to-title" class="ghost">Reset Session</button>
+        </div>
+      </header>
+
+      <main>
+        <section id="screen-title" class="screen screen-title">
+          <div class="title-controls panel">
+            <p class="eyebrow">SIMULATION CONTROL</p>
+            <h1>Select or author a monitored reality.</h1>
+            <p class="lead">
+              Choose one generated scenario or write your own. The system will
+              construct a coherent world model and respond to your actions.
+            </p>
+
+            <div class="controls">
+              <div class="segmented" id="length-toggle">
+                <button data-length="SHORT" class="is-active">Short</button>
+                <button data-length="LONG">Long</button>
+                <button data-length="INFINITE">Infinite</button>
+              </div>
+              <button id="refresh-titles" class="ghost">Regenerate ideas</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <label for="custom-story">Custom story seed</label>
+            <textarea
+              id="custom-story"
+              rows="4"
+              placeholder="A field scientist trapped in a city where every memory is being rewritten in real time."
+            ></textarea>
+            <button id="start-custom-story" class="primary">Start from custom story</button>
+          </div>
+
+          <div class="title-ideas panel">
+            <div class="title-ideas-header">
+              <h2>Generated story options</h2>
+              <span class="caption">3 scenarios / image covers generated in parallel</span>
+            </div>
+            <div id="title-cards" class="cards">
+              <div class="card placeholder">
+                <div class="card-media shimmer"></div>
+                <div class="card-title shimmer"></div>
+                <div class="card-line shimmer"></div>
+                <div class="card-line shimmer"></div>
+              </div>
+              <div class="card placeholder">
+                <div class="card-media shimmer"></div>
+                <div class="card-title shimmer"></div>
+                <div class="card-line shimmer"></div>
+                <div class="card-line shimmer"></div>
+              </div>
+              <div class="card placeholder">
+                <div class="card-media shimmer"></div>
+                <div class="card-title shimmer"></div>
+                <div class="card-line shimmer"></div>
+                <div class="card-line shimmer"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-scene" class="screen screen-scene hidden">
+          <div class="scene-left">
+            <div class="media-frame">
+              <img id="scene-image" alt="Scene visual" />
+              <video id="scene-video" class="hidden" controls></video>
+              <div id="scene-image-fallback" class="media-fallback hidden">
+                Visual incoming
+              </div>
+            </div>
+            <div class="story">
+              <div id="scene-text" class="scene-text"></div>
+            </div>
+          </div>
+
+          <div class="scene-right">
+            <div class="panel actions">
+              <h3>Choose an action</h3>
+              <div id="action-list" class="action-list"></div>
+              <div class="divider"></div>
+              <label for="custom-action">Or write your own</label>
+              <textarea
+                id="custom-action"
+                rows="3"
+                placeholder="I steady my breath and move toward the sound..."
+              ></textarea>
+              <button id="submit-custom" class="primary">Send action</button>
+            </div>
+
+            <div class="panel hints">
+              <h3>Simulation hints</h3>
+              <ul id="hint-list" class="hint-list">
+                <li>Pick a decisive action to push the scene forward.</li>
+                <li>Risky choices can pay off, but expect consequences.</li>
+                <li>Listen for contradictions in the environment.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-loading" class="screen screen-loading hidden">
+          <div class="loader-card">
+            <div class="loader-grid">
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+            </div>
+            <div class="loader-text" id="loading-text">Processing scenario...</div>
+            <ul class="loader-hints" id="loading-hints">
+              <li>Tracking narrative alignment.</li>
+              <li>Calculating consequences.</li>
+              <li>Rendering visual layers.</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+
+      <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <script type="module" src="/frontend/app.js"></script>
+  </body>
+</html>
