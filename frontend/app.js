@@ -25,6 +25,7 @@ const loadingSubtext = el("loading-subtext");
 const loadingHints = el("loading-hints");
 const loadingHintsPanel = el("loading-hints-panel");
 const loaderLayout = el("loader-layout");
+const metricsToggle = el("metrics-toggle");
 const ttsToggle = el("tts-toggle");
 const musicToggle = el("music-toggle");
 const backToTitle = el("back-to-title");
@@ -32,6 +33,13 @@ const toast = el("toast");
 const resetModal = el("reset-modal");
 const cancelReset = el("cancel-reset");
 const confirmReset = el("confirm-reset");
+const metricsModal = el("metrics-modal");
+const closeMetrics = el("close-metrics");
+const metricInput = el("metric-input");
+const metricThinking = el("metric-thinking");
+const metricOutput = el("metric-output");
+const metricTotal = el("metric-total");
+const metricsBreakdown = el("metrics-breakdown");
 
 const state = {
   sessionId: null,
@@ -42,6 +50,7 @@ const state = {
   transitionHints: [],
   currentMusicPath: null,
   currentTtsPath: null,
+  simulationMetrics: null,
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
 };
@@ -89,6 +98,44 @@ function updateTopStatus() {
 
 function setMusicState(label) {
   musicState.textContent = label;
+}
+
+function _fmt(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function renderSimulationMetrics(metrics) {
+  const totals = metrics?.totals || {};
+  metricInput.textContent = _fmt(totals.input_tokens);
+  metricThinking.textContent = _fmt(totals.thinking_tokens);
+  metricOutput.textContent = _fmt(totals.output_tokens);
+  metricTotal.textContent = _fmt(totals.total_tokens);
+
+  const byCall = metrics?.by_call_type || {};
+  const entries = Object.entries(byCall);
+  if (!entries.length) {
+    metricsBreakdown.textContent = "No calls yet.";
+    return;
+  }
+
+  metricsBreakdown.innerHTML = "";
+  entries
+    .sort((a, b) => (b[1]?.total_tokens || 0) - (a[1]?.total_tokens || 0))
+    .forEach(([callType, usage]) => {
+      const row = document.createElement("div");
+      row.className = "metrics-breakdown-row";
+      const label = document.createElement("span");
+      label.textContent = callType.replaceAll("_", " ");
+      const value = document.createElement("span");
+      value.textContent = `${_fmt(usage.total_tokens)} total`;
+      row.append(label, value);
+      metricsBreakdown.appendChild(row);
+    });
+}
+
+function setSimulationMetrics(metrics) {
+  state.simulationMetrics = metrics || null;
+  renderSimulationMetrics(state.simulationMetrics);
 }
 
 function showScreen(screen) {
@@ -216,6 +263,20 @@ async function fetchJson(url, payload = null) {
   return data;
 }
 
+async function fetchSimulationMetrics(sessionId) {
+  if (!sessionId) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/simulation-metrics/${sessionId}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data?.simulation_metrics) {
+      setSimulationMetrics(data.simulation_metrics);
+    }
+  } catch (_err) {
+    // Keep the UI responsive even if metrics fetch fails.
+  }
+}
+
 async function loadTitleIdeas() {
   setLoading(
     "Calibrating simulation scenarios...",
@@ -340,6 +401,7 @@ async function startGame(storyText) {
     sessionIdEl.textContent = state.sessionId.slice(0, 8);
     updateTopStatus();
     setMusicState("Initialized");
+    setSimulationMetrics(data.simulation_metrics);
 
     renderScene({
       ...data.initial_scene,
@@ -381,6 +443,7 @@ async function submitAction(actionText) {
 
     state.turnNumber = data.turn_number || state.turnNumber + 1;
     updateTopStatus();
+    setSimulationMetrics(data.simulation_metrics);
 
     renderScene(data.scene || {});
     state.transitionHints = extractHintTexts(data.hints);
@@ -462,17 +525,33 @@ backToTitle.addEventListener("click", () => {
   resetModal.classList.remove("hidden");
 });
 
+metricsToggle.addEventListener("click", async () => {
+  if (state.sessionId) {
+    await fetchSimulationMetrics(state.sessionId);
+  } else {
+    renderSimulationMetrics(state.simulationMetrics);
+  }
+  metricsModal.classList.remove("hidden");
+});
+
+closeMetrics.addEventListener("click", () => {
+  metricsModal.classList.add("hidden");
+});
+
 cancelReset.addEventListener("click", () => {
   resetModal.classList.add("hidden");
 });
 
 confirmReset.addEventListener("click", () => {
   resetModal.classList.add("hidden");
+  metricsModal.classList.add("hidden");
   state.sessionId = null;
   state.turnNumber = 0;
   state.currentMusicPath = null;
   state.currentTtsPath = null;
   state.transitionHints = [];
+  state.simulationMetrics = null;
+  renderSimulationMetrics(null);
   sessionIdEl.textContent = "--";
   setMusicState("Idle");
   state.ttsAudio.pause();
@@ -484,4 +563,5 @@ confirmReset.addEventListener("click", () => {
 
 loadSettings();
 setMusicState("Idle");
+renderSimulationMetrics(null);
 loadTitleIdeas();

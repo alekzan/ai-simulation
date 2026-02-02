@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.db import init_db
+from backend.routes.metrics import router as metrics_router
 from backend.routes.title import router as title_router
 from backend.routes.init import router as init_router
 from backend.routes.turn import router as turn_router
@@ -31,6 +32,7 @@ def startup() -> None:
 app.include_router(title_router)
 app.include_router(init_router)
 app.include_router(turn_router)
+app.include_router(metrics_router)
 
 FRONTEND_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)

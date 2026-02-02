@@ -24,6 +24,7 @@ from backend.schemas import (
     StoryMemorySummarizerInput,
     StoryMemorySummarizerOutput,
 )
+from backend.token_usage import extract_usage_metadata, record_token_usage
 from backend.validation import (
     StructuredOutputValidationError,
     validate_inventory_image_rules,
@@ -178,7 +179,7 @@ def _run_canonicalizer(
     failed_skill_update: Optional[FailedSkillUpdate],
     scene_excerpt: Optional[str],
     player_action: Optional[str],
-) -> CanonicalizerOutput:
+) -> tuple[CanonicalizerOutput, dict[str, int]]:
     client = get_genai_client()
 
     payload = CanonicalizerInput(
@@ -202,7 +203,7 @@ def _run_canonicalizer(
     )
 
     parsed = validate_model_json(response.text, CanonicalizerOutput)
-    return parsed
+    return parsed, extract_usage_metadata(response)
 
 
 def _summarize_story_memory(session_id: str) -> None:
@@ -254,6 +255,12 @@ def _summarize_story_memory(session_id: str) -> None:
     except StructuredOutputValidationError:
         return
 
+    record_token_usage(
+        state,
+        "story_memory_summarizer",
+        extract_usage_metadata(response),
+        turn_number=state.get("turn_number"),
+    )
     state["story_memory"] = _dump_model(parsed.story_memory)
     save_session(session_id, state)
 
@@ -308,6 +315,12 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         parsed = validate_model_json(response.text, DirectorNarratorOutput)
     except StructuredOutputValidationError as exc:
         return JSONResponse(status_code=422, content=exc.to_error_payload())
+    record_token_usage(
+        state,
+        "director",
+        extract_usage_metadata(response),
+        turn_number=next_turn_number,
+    )
 
     # Enforce inventory image_prompt rules based on prior inventory state
     prior_counts = {item["name"]: item.get("new_count", 0) for item in state.get("inventory", [])}
@@ -327,13 +340,19 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         for skill in state.get("skills", []):
             canonical_skills_by_domain.setdefault(skill["domain"], []).append(skill["name"])
 
-        canonical_out = _run_canonicalizer(
+        canonical_out, canonicalizer_usage = _run_canonicalizer(
             canonical_inventory=canonical_inventory,
             canonical_skills_by_domain=canonical_skills_by_domain,
             failed_inventory_updates=failed_inventory,
             failed_skill_update=failed_skill,
             scene_excerpt=parsed.next_scene.text_story[:300],
             player_action=payload.action,
+        )
+        record_token_usage(
+            state,
+            "canonicalizer",
+            canonicalizer_usage,
+            turn_number=next_turn_number,
         )
 
         # Retry applying corrected updates
@@ -431,4 +450,5 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         "inventory": updated_inventory,
         "skills": updated_skills,
         "current_music": state.get("current_music"),
+        "simulation_metrics": state.get("token_usage", {}),
     }

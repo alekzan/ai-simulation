@@ -35,6 +35,7 @@
           </div>
         </div>
         <div class="top-controls">
+          <button id="metrics-toggle" class="ghost">Simulation Metrics</button>
           <button id="tts-toggle" class="toggle">TTS: On</button>
           <button id="music-toggle" class="toggle">Music: On</button>
           <button id="back-to-title" class="ghost">Reset Session</button>
@@ -172,6 +173,27 @@
           <div class="modal-actions">
             <button id="cancel-reset" class="ghost">Keep current session</button>
             <button id="confirm-reset" class="primary">Delete progress and reset</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="metrics-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card metrics-card">
+          <h3>Simulation Metrics</h3>
+          <p class="metrics-note">Token usage for the current simulation session.</p>
+
+          <div class="metrics-grid">
+            <div class="metric-row"><span>Input Tokens</span><strong id="metric-input">0</strong></div>
+            <div class="metric-row"><span>Thinking Tokens</span><strong id="metric-thinking">0</strong></div>
+            <div class="metric-row"><span>Output Tokens</span><strong id="metric-output">0</strong></div>
+            <div class="metric-row total"><span>Total Tokens</span><strong id="metric-total">0</strong></div>
+          </div>
+
+          <h4>Breakdown by call</h4>
+          <div id="metrics-breakdown" class="metrics-breakdown">No calls yet.</div>
+
+          <div class="modal-actions">
+            <button id="close-metrics" class="primary">Close</button>
           </div>
         </div>
       </div>

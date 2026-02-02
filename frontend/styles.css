@@ -655,6 +655,80 @@ textarea:focus {
   line-height: 1.55;
 }
 
+.metrics-card {
+  border-color: var(--line);
+}
+
+.metrics-note {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.metrics-grid {
+  margin-top: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+}
+
+.metric-row span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.metric-row strong {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.metric-row.total {
+  background: rgba(137, 169, 198, 0.12);
+}
+
+.metrics-card h4 {
+  margin: 16px 0 8px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.metrics-breakdown {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.metrics-breakdown-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(143, 175, 196, 0.1);
+}
+
+.metrics-breakdown-row:last-child {
+  border-bottom: none;
+}
+
+.metrics-breakdown-row span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
 .modal-actions {
   margin-top: 16px;
   display: flex;

@@ -13,6 +13,7 @@ from backend.db import create_session, save_session
 from backend.media import generate_music, generate_scene_image, generate_tts
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
 from backend.schemas import InitialScriptOutput
+from backend.token_usage import extract_usage_metadata, record_token_usage
 from backend.validation import StructuredOutputValidationError, validate_model_json
 
 router = APIRouter(prefix="/api", tags=["init"])
@@ -85,7 +86,23 @@ def init_game(payload: InitRequest) -> dict:
         "turn_number": 1,
         "game_length_mode": payload.game_length_mode,
         "target_turns_hint": target_turns_hint,
+        "token_usage": {
+            "totals": {
+                "input_tokens": 0,
+                "thinking_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+            },
+            "by_call_type": {},
+            "events": [],
+        },
     }
+    record_token_usage(
+        session_state,
+        "init_script",
+        extract_usage_metadata(response),
+        turn_number=1,
+    )
 
     session_id = create_session(session_state)
     session_slug = _session_slug(session_id)
@@ -141,4 +158,5 @@ def init_game(payload: InitRequest) -> dict:
         "initial_script": parsed_dict,
         "initial_scene": initial_scene_dict,
         "initial_media": media_paths,
+        "simulation_metrics": session_state["token_usage"],
     }
