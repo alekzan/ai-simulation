@@ -57,8 +57,11 @@
                 <button data-length="LONG">Long</button>
                 <button data-length="INFINITE">Infinite</button>
               </div>
-              <button id="refresh-titles" class="ghost">Regenerate ideas</button>
             </div>
+            <p class="mode-help">
+              Session length: <strong>Short</strong> is a quick run, <strong>Long</strong> is an extended arc, and
+              <strong>Infinite</strong> keeps evolving until you decide to stop.
+            </p>
 
             <div class="divider"></div>
 
@@ -74,7 +77,10 @@
           <div class="title-ideas panel">
             <div class="title-ideas-header">
               <h2>Generated story options</h2>
-              <span class="caption">3 scenarios / image covers generated in parallel</span>
+              <div class="title-ideas-meta">
+                <span class="caption">3 scenarios / image covers generated in parallel</span>
+                <button id="refresh-titles" class="ghost">Regenerate ideas</button>
+              </div>
             </div>
             <div id="title-cards" class="cards">
               <div class="card placeholder">
@@ -126,36 +132,49 @@
               ></textarea>
               <button id="submit-custom" class="primary">Send action</button>
             </div>
-
-            <div class="panel hints">
-              <h3>Simulation hints</h3>
-              <ul id="hint-list" class="hint-list">
-                <li>Pick a decisive action to push the scene forward.</li>
-                <li>Risky choices can pay off, but expect consequences.</li>
-                <li>Listen for contradictions in the environment.</li>
-              </ul>
-            </div>
           </div>
         </section>
 
         <section id="screen-loading" class="screen screen-loading hidden">
-          <div class="loader-card">
-            <div class="loader-grid">
-              <div class="loader-dot"></div>
-              <div class="loader-dot"></div>
-              <div class="loader-dot"></div>
+          <div id="loader-layout" class="loader-layout">
+            <div class="loader-card">
+              <div class="loader-grid">
+                <div class="loader-dot"></div>
+                <div class="loader-dot"></div>
+                <div class="loader-dot"></div>
+              </div>
+              <div class="loader-text" id="loading-text">Calibrating simulation...</div>
+              <p id="loading-subtext" class="loader-subtext">
+                Synchronizing world conditions before you step into the next moment.
+              </p>
             </div>
-            <div class="loader-text" id="loading-text">Processing scenario...</div>
-            <ul class="loader-hints" id="loading-hints">
-              <li>Tracking narrative alignment.</li>
-              <li>Calculating consequences.</li>
-              <li>Rendering visual layers.</li>
-            </ul>
+            <div id="loading-hints-panel" class="panel loading-hints-panel">
+              <h3>Simulation Hints</h3>
+              <ul class="loader-hints" id="loading-hints">
+                <li>Tracking narrative alignment.</li>
+                <li>Calculating consequences.</li>
+                <li>Rendering visual layers.</li>
+              </ul>
+            </div>
           </div>
         </section>
       </main>
 
       <div id="toast" class="toast hidden"></div>
+
+      <div id="reset-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+          <h3>Reset simulation session?</h3>
+          <p>
+            This will permanently end your current run, clear all scene progress, and send
+            you back to the title screen. This action cannot be undone.
+          </p>
+          <div class="modal-actions">
+            <button id="cancel-reset" class="ghost">Keep current session</button>
+            <button id="confirm-reset" class="primary">Delete progress and reset</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/frontend/app.js"></script>

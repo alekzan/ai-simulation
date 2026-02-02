@@ -16,6 +16,39 @@ from backend.validation import StructuredOutputValidationError, validate_model_j
 router = APIRouter(prefix="/api", tags=["title"])
 
 
+def _is_development_mode() -> bool:
+    import os
+
+    env = os.getenv("APP_ENV", "development").strip().lower()
+    return env not in {"production", "prod"}
+
+
+def _dev_fixed_ideas() -> list[dict]:
+    return [
+        {
+            "id": "A",
+            "title": "Neon Ghost Protocol",
+            "one_liner": "A sentient virus has locked down the city's neural network, and your consciousness is the next target for deletion.",
+            "cover_image_prompt": "",
+            "cover_image_path": "media/images/title_acff3de5_A.png",
+        },
+        {
+            "id": "B",
+            "title": "The Last Ember of Solace",
+            "one_liner": "The eternal winter is snuffing out the world's final heat source, and the mountain tribe believes you are the sacrifice required to restart the sun.",
+            "cover_image_prompt": "",
+            "cover_image_path": "media/images/title_acff3de5_B.png",
+        },
+        {
+            "id": "C",
+            "title": "Deep Void Salvage",
+            "one_liner": "Your derelict scouting vessel is being pulled into a sentient black hole that feeds on the memories of its passengers.",
+            "cover_image_prompt": "",
+            "cover_image_path": "media/images/title_acff3de5_C.png",
+        },
+    ]
+
+
 def _generate_title_ideas() -> TitleScreenSelectorOutput:
     client = get_genai_client()
 
@@ -34,6 +67,19 @@ def _generate_title_ideas() -> TitleScreenSelectorOutput:
 
 @router.post("/title-options")
 def title_options() -> dict:
+    if _is_development_mode():
+        return {
+            "ideas": [
+                {
+                    "id": idea["id"],
+                    "title": idea["title"],
+                    "one_liner": idea["one_liner"],
+                    "cover_image_prompt": idea["cover_image_prompt"],
+                }
+                for idea in _dev_fixed_ideas()
+            ]
+        }
+
     try:
         parsed = _generate_title_ideas()
     except StructuredOutputValidationError as exc:
@@ -44,6 +90,9 @@ def title_options() -> dict:
 
 @router.post("/title-options-with-covers")
 def title_options_with_covers() -> dict:
+    if _is_development_mode():
+        return {"ideas": _dev_fixed_ideas()}
+
     try:
         parsed = _generate_title_ideas()
     except StructuredOutputValidationError as exc:

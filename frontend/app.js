@@ -20,13 +20,18 @@ const sceneImageFallback = el("scene-image-fallback");
 const actionList = el("action-list");
 const customAction = el("custom-action");
 const submitCustom = el("submit-custom");
-const hintList = el("hint-list");
 const loadingText = el("loading-text");
+const loadingSubtext = el("loading-subtext");
 const loadingHints = el("loading-hints");
+const loadingHintsPanel = el("loading-hints-panel");
+const loaderLayout = el("loader-layout");
 const ttsToggle = el("tts-toggle");
 const musicToggle = el("music-toggle");
 const backToTitle = el("back-to-title");
 const toast = el("toast");
+const resetModal = el("reset-modal");
+const cancelReset = el("cancel-reset");
+const confirmReset = el("confirm-reset");
 
 const state = {
   sessionId: null,
@@ -34,30 +39,19 @@ const state = {
   gameLength: "SHORT",
   ttsMuted: false,
   musicMuted: false,
+  transitionHints: [],
   currentMusicPath: null,
+  currentTtsPath: null,
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
 };
 
 state.musicAudio.loop = true;
-
-const loadingHintSets = {
-  ideas: [
-    "Drafting story hooks.",
-    "Rendering 3 cover images in parallel.",
-    "Building selection cards.",
-  ],
-  init: [
-    "Constructing dramatic spine.",
-    "Generating opening media in parallel.",
-    "Preparing first scene options.",
-  ],
-  turn: [
-    "Projecting next consequences.",
-    "Updating canonical state.",
-    "Rendering scene media.",
-  ],
-};
+const defaultTurnLoadingHints = [
+  "Reading your intent and projected risk.",
+  "Rebalancing the simulation around your move.",
+  "Materializing the next observed moment.",
+];
 
 function normalizePath(path) {
   if (!path) return null;
@@ -84,7 +78,6 @@ function persistSettings() {
 function loadSettings() {
   state.ttsMuted = JSON.parse(localStorage.getItem("ttsMuted") || "false");
   state.musicMuted = JSON.parse(localStorage.getItem("musicMuted") || "false");
-  state.ttsAudio.muted = state.ttsMuted;
   state.musicAudio.muted = state.musicMuted;
   setToggleState(ttsToggle, "TTS", state.ttsMuted);
   setToggleState(musicToggle, "Music", state.musicMuted);
@@ -108,15 +101,26 @@ function showScreen(screen) {
   topbar.classList.toggle("hidden", !showTopbar);
 }
 
-function setLoading(message, hints) {
+function setLoading(message, hints, subtext) {
+  const safeHints = Array.isArray(hints) ? hints.filter(Boolean) : [];
   loadingText.textContent = message;
+  loadingSubtext.textContent =
+    subtext ||
+    "Synchronizing simulation layers before the next scene resolves.";
   loadingHints.innerHTML = "";
-  (hints || []).forEach((hint) => {
+  safeHints.forEach((hint) => {
     const li = document.createElement("li");
     li.textContent = hint;
     loadingHints.appendChild(li);
   });
+  loadingHintsPanel.classList.toggle("hidden", safeHints.length === 0);
+  loaderLayout.classList.toggle("no-hints", safeHints.length === 0);
   showScreen(loadingScreen);
+}
+
+function extractHintTexts(hints) {
+  const lines = hints?.lines || [];
+  return lines.map((line) => line.text).filter(Boolean);
 }
 
 function renderSceneText(text) {
@@ -127,23 +131,6 @@ function renderSceneText(text) {
     const p = document.createElement("p");
     p.textContent = trimmed;
     sceneText.appendChild(p);
-  });
-}
-
-function renderHints(hints) {
-  hintList.innerHTML = "";
-  const lines = hints?.lines?.length
-    ? hints.lines
-    : [
-        { text: "Stay coherent with your objective." },
-        { text: "The system rewards plausible intent." },
-        { text: "Unexpected choices produce stronger shifts." },
-      ];
-
-  lines.forEach((hint) => {
-    const li = document.createElement("li");
-    li.textContent = hint.text;
-    hintList.appendChild(li);
   });
 }
 
@@ -230,7 +217,11 @@ async function fetchJson(url, payload = null) {
 }
 
 async function loadTitleIdeas() {
-  setLoading("Analyzing story candidates...", loadingHintSets.ideas);
+  setLoading(
+    "Calibrating simulation scenarios...",
+    [],
+    "Scanning possible realities and preparing your entry points."
+  );
   renderTitlePlaceholders();
 
   try {
@@ -243,11 +234,28 @@ async function loadTitleIdeas() {
   }
 }
 
-async function playAudio(audio, path) {
+function isSameAudioSource(audio, source) {
+  if (!audio.src) return false;
+  try {
+    return (
+      new URL(audio.src).pathname === new URL(source, window.location.origin).pathname
+    );
+  } catch (_err) {
+    return audio.src.endsWith(source);
+  }
+}
+
+async function playAudio(audio, path, options = {}) {
+  const { restart = false } = options;
   if (!path) return;
   const source = normalizePath(path);
   if (!source) return;
-  audio.src = source;
+  const sameSource = isSameAudioSource(audio, source);
+  if (!sameSource) {
+    audio.src = source;
+  } else if (restart) {
+    audio.currentTime = 0;
+  }
   try {
     await audio.play();
   } catch (_err) {
@@ -256,8 +264,12 @@ async function playAudio(audio, path) {
 }
 
 async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
-  if (ttsPath && !state.ttsMuted) {
-    await playAudio(state.ttsAudio, ttsPath);
+  if (ttsPath) {
+    state.currentTtsPath = ttsPath;
+  }
+
+  if (state.currentTtsPath && !state.ttsMuted) {
+    await playAudio(state.ttsAudio, state.currentTtsPath, { restart: true });
   }
 
   if (!musicPath) return;
@@ -265,7 +277,7 @@ async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
   if (forceMusic || state.currentMusicPath !== musicPath) {
     state.currentMusicPath = musicPath;
     if (!state.musicMuted) {
-      await playAudio(state.musicAudio, musicPath);
+      await playAudio(state.musicAudio, musicPath, { restart: forceMusic });
     } else {
       state.musicAudio.src = normalizePath(musicPath);
     }
@@ -280,6 +292,7 @@ function setMediaDisplay(mediaType) {
 
 function renderScene(scene) {
   updateTopStatus();
+  state.currentTtsPath = scene.tts_path || null;
   renderSceneText(scene.text_story || "");
   renderActions(scene.action_options || []);
   setMediaDisplay(scene.media_type || "image");
@@ -308,7 +321,11 @@ async function startGame(storyText) {
     return;
   }
 
-  setLoading("Bootstrapping simulation...", loadingHintSets.init);
+  setLoading(
+    "Initializing your simulation instance...",
+    [],
+    "Stabilizing world conditions before your first live scene begins."
+  );
 
   try {
     const data = await fetchJson(`${API_BASE}/api/init`, {
@@ -319,6 +336,7 @@ async function startGame(storyText) {
     state.sessionId = data.session_id;
     state.turnNumber = 1;
     state.currentMusicPath = null;
+    state.transitionHints = extractHintTexts(data.initial_script?.hints);
     sessionIdEl.textContent = state.sessionId.slice(0, 8);
     updateTopStatus();
     setMusicState("Initialized");
@@ -331,7 +349,6 @@ async function startGame(storyText) {
       music_path: data.initial_media?.music_path,
     });
 
-    renderHints(data.initial_script?.hints || { lines: [] });
     showScreen(sceneScreen);
 
     await playSceneAudio(
@@ -348,7 +365,13 @@ async function startGame(storyText) {
 async function submitAction(actionText) {
   if (!state.sessionId || !actionText) return;
 
-  setLoading("Predicting next reality state...", loadingHintSets.turn);
+  state.ttsAudio.pause();
+  state.ttsAudio.currentTime = 0;
+  setLoading(
+    "Advancing to the next simulation turn...",
+    state.transitionHints.length > 0 ? state.transitionHints : defaultTurnLoadingHints,
+    "Hold position while the system resolves your action."
+  );
 
   try {
     const data = await fetchJson(`${API_BASE}/api/turn`, {
@@ -360,7 +383,7 @@ async function submitAction(actionText) {
     updateTopStatus();
 
     renderScene(data.scene || {});
-    renderHints(data.hints || { lines: [] });
+    state.transitionHints = extractHintTexts(data.hints);
 
     const musicChanged = data.scene?.music_action === "CHANGE";
     setMusicState(musicChanged ? "Transition" : "Stable");
@@ -411,9 +434,17 @@ customAction.addEventListener("keydown", (event) => {
 
 ttsToggle.addEventListener("click", () => {
   state.ttsMuted = !state.ttsMuted;
-  state.ttsAudio.muted = state.ttsMuted;
   setToggleState(ttsToggle, "TTS", state.ttsMuted);
   persistSettings();
+  if (state.ttsMuted) {
+    state.ttsAudio.pause();
+    state.ttsAudio.currentTime = 0;
+    return;
+  }
+
+  if (state.currentTtsPath) {
+    playAudio(state.ttsAudio, state.currentTtsPath, { restart: true });
+  }
 });
 
 musicToggle.addEventListener("click", () => {
@@ -428,9 +459,20 @@ musicToggle.addEventListener("click", () => {
 });
 
 backToTitle.addEventListener("click", () => {
+  resetModal.classList.remove("hidden");
+});
+
+cancelReset.addEventListener("click", () => {
+  resetModal.classList.add("hidden");
+});
+
+confirmReset.addEventListener("click", () => {
+  resetModal.classList.add("hidden");
   state.sessionId = null;
   state.turnNumber = 0;
   state.currentMusicPath = null;
+  state.currentTtsPath = null;
+  state.transitionHints = [];
   sessionIdEl.textContent = "--";
   setMusicState("Idle");
   state.ttsAudio.pause();

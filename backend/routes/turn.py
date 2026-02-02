@@ -44,6 +44,10 @@ def _dump_model(model: BaseModel) -> dict:
     return model.dict()
 
 
+def _session_slug(session_id: str) -> str:
+    return session_id.replace("-", "")
+
+
 def _build_dynamic_context(state: dict, recent_scenes: List[dict]) -> str:
     payload = {
         "main_dramatic_concept": state["main_dramatic_concept"],
@@ -349,6 +353,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         state["current_music"] = parsed.next_scene.music_prompt
 
     # Generate media in parallel
+    session_slug = _session_slug(payload.session_id)
     media_paths: Dict[str, Optional[str]] = {"image_path": None, "tts_path": None, "music_path": None}
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -357,18 +362,18 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
                 futures["image_path"] = executor.submit(
                     generate_scene_image,
                     parsed.next_scene.media_prompt,
-                    f"scene_{next_turn_number}.png",
+                    f"{session_slug}_scene_{next_turn_number}.png",
                 )
             futures["tts_path"] = executor.submit(
                 generate_tts,
                 parsed.next_scene.text_story,
-                f"tts_{next_turn_number}.wav",
+                f"{session_slug}_tts_{next_turn_number}.wav",
             )
             if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
                 futures["music_path"] = executor.submit(
                     generate_music,
                     parsed.next_scene.music_prompt,
-                    f"music_{next_turn_number}.wav",
+                    f"{session_slug}_music_{next_turn_number}.wav",
                 )
 
             for key, future in futures.items():

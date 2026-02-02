@@ -243,6 +243,12 @@ button:active {
   gap: 10px;
 }
 
+.title-ideas-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .title-ideas-header h2 {
   margin: 0;
   font-family: "Plus Jakarta Sans", sans-serif;
@@ -283,6 +289,18 @@ h1 {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.mode-help {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mode-help strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .segmented {
@@ -475,8 +493,7 @@ textarea:focus {
   font-size: 16px;
 }
 
-.actions,
-.hints {
+.actions {
   padding: 14px;
 }
 
@@ -500,45 +517,31 @@ textarea:focus {
   border-color: rgba(184, 214, 239, 0.44);
 }
 
-.hint-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.hint-list li {
-  position: relative;
-  padding-left: 14px;
-  font-size: 14px;
-  color: var(--text-soft);
-}
-
-.hint-list li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 8px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(173, 202, 229, 0.55);
-}
-
 .screen-loading {
   min-height: 70vh;
   display: grid;
   place-items: center;
 }
 
+.loader-layout {
+  width: min(920px, 95vw);
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(280px, 1fr);
+  gap: 14px;
+}
+
+.loader-layout.no-hints {
+  width: min(520px, 95vw);
+  grid-template-columns: minmax(320px, 520px);
+  justify-content: center;
+}
+
 .loader-card {
-  width: min(420px, 92vw);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 24px;
   background: rgba(7, 13, 20, 0.84);
-  text-align: center;
+  text-align: left;
 }
 
 .loader-grid {
@@ -578,18 +581,35 @@ textarea:focus {
 
 .loader-text {
   font-family: "Plus Jakarta Sans", sans-serif;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   font-size: 18px;
+}
+
+.loader-subtext {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.loading-hints-panel {
+  padding: 20px;
+}
+
+.loading-hints-panel h3 {
+  margin: 0 0 10px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 16px;
 }
 
 .loader-hints {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding-left: 18px;
+  list-style: disc;
   display: grid;
-  gap: 5px;
+  gap: 6px;
   color: var(--text-soft);
   font-size: 14px;
+  line-height: 1.45;
 }
 
 .toast {
@@ -604,9 +624,56 @@ textarea:focus {
   z-index: 8;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 10, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 12;
+}
+
+.modal-card {
+  width: min(520px, 92vw);
+  border: 1px solid rgba(229, 165, 127, 0.4);
+  border-radius: 14px;
+  background: rgba(9, 15, 23, 0.96);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.52);
+  padding: 20px;
+}
+
+.modal-card h3 {
+  margin: 0 0 10px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-size: 20px;
+}
+
+.modal-card p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @media (max-width: 1080px) {
   .screen-title,
   .screen-scene {
+    grid-template-columns: 1fr;
+  }
+
+  .loader-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .loader-layout.no-hints {
+    width: min(520px, 95vw);
     grid-template-columns: 1fr;
   }
 
@@ -632,5 +699,15 @@ textarea:focus {
 
   .cards {
     grid-template-columns: 1fr;
+  }
+
+  .title-ideas-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .title-ideas-meta {
+    width: 100%;
+    justify-content: space-between;
   }
 }
