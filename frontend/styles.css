@@ -1,18 +1,18 @@
 :root {
-  --bg: #05080d;
-  --bg-soft: #0a1018;
-  --bg-panel: rgba(10, 18, 28, 0.76);
-  --bg-panel-strong: rgba(8, 14, 22, 0.92);
-  --line: rgba(143, 175, 196, 0.24);
-  --line-soft: rgba(143, 175, 196, 0.12);
-  --text: #d7e1ea;
-  --text-soft: #9dadbb;
-  --text-muted: #76899c;
-  --accent: #89a9c6;
-  --accent-soft: rgba(137, 169, 198, 0.25);
-  --alert: #e5a57f;
-  --radius: 14px;
-  --radius-lg: 22px;
+  --bg: #020305;
+  --bg-soft: #06080d;
+  --bg-panel: rgba(5, 8, 12, 0.9);
+  --bg-panel-strong: rgba(2, 5, 9, 0.96);
+  --line: rgba(188, 202, 220, 0.22);
+  --line-soft: rgba(188, 202, 220, 0.12);
+  --text: #e8edf3;
+  --text-soft: #b6c2cf;
+  --text-muted: #8b98a7;
+  --accent: #f0a563;
+  --accent-soft: rgba(240, 165, 99, 0.25);
+  --alert: #f0a563;
+  --radius: 4px;
+  --radius-lg: 6px;
   --shadow: rgba(0, 0, 0, 0.48);
   --transition: 220ms ease;
 }
@@ -28,17 +28,20 @@ body {
 }
 
 body {
-  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--text);
-  background: radial-gradient(circle at 20% -10%, #132131 0%, #060a0f 48%, #02050a 100%);
-  letter-spacing: 0.01em;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(61, 88, 118, 0.18) 0%, transparent 45%),
+    linear-gradient(180deg, #020305 0%, #03060b 52%, #010204 100%);
+  letter-spacing: 0.015em;
 }
 
 #app {
   position: relative;
   min-height: 100vh;
-  padding: 20px 26px 30px;
-  overflow: hidden;
+  padding: 20px 26px calc(34px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .ambient-base {
@@ -46,8 +49,8 @@ body {
   inset: -10% -10% auto;
   height: 70vh;
   background:
-    radial-gradient(circle at 18% 22%, rgba(86, 120, 152, 0.2) 0%, transparent 50%),
-    radial-gradient(circle at 80% 10%, rgba(53, 76, 99, 0.2) 0%, transparent 38%);
+    radial-gradient(circle at 18% 22%, rgba(110, 132, 156, 0.14) 0%, transparent 52%),
+    radial-gradient(circle at 80% 10%, rgba(67, 83, 101, 0.18) 0%, transparent 42%);
   filter: blur(24px);
   pointer-events: none;
   z-index: 0;
@@ -60,13 +63,13 @@ body {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(224, 241, 255, 0.012) 0px,
-    rgba(224, 241, 255, 0.012) 1px,
+    rgba(224, 241, 255, 0.014) 0px,
+    rgba(224, 241, 255, 0.014) 1px,
     transparent 2px,
     transparent 4px
   );
   mix-blend-mode: screen;
-  opacity: 0.32;
+  opacity: 0.36;
   z-index: 0;
 }
 
@@ -117,15 +120,16 @@ main {
   margin-bottom: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(160deg, rgba(11, 18, 27, 0.9) 10%, rgba(8, 14, 22, 0.72) 100%);
+  background: linear-gradient(180deg, rgba(5, 8, 12, 0.94) 0%, rgba(3, 6, 10, 0.98) 100%);
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 36px var(--shadow);
 }
 
 .brand-title {
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .brand-subtitle {
@@ -133,7 +137,7 @@ main {
   font-size: 12px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.13em;
 }
 
 .status-grid {
@@ -145,9 +149,9 @@ main {
 .status-item {
   min-width: 98px;
   border: 1px solid var(--line-soft);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 6px 8px;
-  background: rgba(12, 20, 30, 0.72);
+  background: rgba(6, 11, 16, 0.85);
 }
 
 .status-item span {
@@ -161,9 +165,10 @@ main {
 .status-item strong {
   display: block;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
+  text-transform: uppercase;
 }
 
 .top-controls {
@@ -179,17 +184,17 @@ textarea {
 
 button {
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 3px;
   color: var(--text);
-  background: rgba(14, 24, 35, 0.8);
+  background: rgba(6, 10, 16, 0.88);
   padding: 9px 14px;
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition), transform var(--transition);
 }
 
 button:hover {
-  border-color: rgba(180, 208, 231, 0.38);
-  background: rgba(20, 31, 43, 0.9);
+  border-color: rgba(221, 171, 129, 0.64);
+  background: rgba(13, 19, 27, 0.95);
 }
 
 button:active {
@@ -197,24 +202,25 @@ button:active {
 }
 
 .primary {
-  border-color: rgba(154, 188, 217, 0.44);
-  background: linear-gradient(120deg, rgba(38, 64, 90, 0.92), rgba(28, 47, 66, 0.95));
+  border-color: rgba(240, 165, 99, 0.5);
+  color: #ffd8ba;
+  background: linear-gradient(180deg, rgba(47, 29, 15, 0.96), rgba(29, 18, 10, 0.98));
 }
 
 .ghost {
-  background: rgba(13, 22, 33, 0.56);
+  background: rgba(7, 11, 17, 0.7);
 }
 
 .toggle.is-off {
-  color: var(--alert);
-  border-color: rgba(229, 165, 127, 0.45);
-  background: rgba(53, 31, 25, 0.5);
+  color: #ffd8ba;
+  border-color: rgba(240, 165, 99, 0.62);
+  background: rgba(44, 26, 14, 0.72);
 }
 
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: linear-gradient(175deg, var(--bg-panel) 0%, rgba(7, 13, 20, 0.85) 100%);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, rgba(4, 7, 11, 0.96) 100%);
   box-shadow: 0 18px 42px var(--shadow);
 }
 
@@ -251,8 +257,8 @@ button:active {
 
 .title-ideas-header h2 {
   margin: 0;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 20px;
+  text-transform: uppercase;
 }
 
 .caption {
@@ -272,9 +278,9 @@ button:active {
 
 h1 {
   margin: 8px 0 12px;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: clamp(27px, 3.2vw, 37px);
   line-height: 1.12;
+  text-transform: uppercase;
 }
 
 .lead {
@@ -306,22 +312,22 @@ h1 {
 .segmented {
   display: inline-flex;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: 1px solid var(--line-soft);
-  background: rgba(9, 15, 23, 0.8);
+  background: rgba(5, 8, 13, 0.9);
   gap: 4px;
 }
 
 .segmented button {
   border: none;
   padding: 8px 13px;
-  color: var(--text-soft);
+  color: var(--text-muted);
   background: transparent;
 }
 
 .segmented button.is-active {
   color: var(--text);
-  background: rgba(137, 169, 198, 0.22);
+  background: rgba(240, 165, 99, 0.24);
 }
 
 .divider {
@@ -342,9 +348,9 @@ label {
 textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 3px;
   color: var(--text);
-  background: rgba(5, 10, 15, 0.65);
+  background: rgba(2, 5, 9, 0.8);
   padding: 12px;
   resize: vertical;
   line-height: 1.4;
@@ -363,14 +369,14 @@ textarea:focus {
 
 .card {
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: 4px;
   overflow: hidden;
-  background: rgba(9, 15, 23, 0.65);
+  background: rgba(4, 8, 13, 0.82);
   transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
 }
 
 .card:hover {
-  border-color: rgba(183, 212, 237, 0.36);
+  border-color: rgba(240, 165, 99, 0.46);
   transform: translateY(-2px);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
 }
@@ -388,9 +394,9 @@ textarea:focus {
 }
 
 .card-title {
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 17px;
   margin-bottom: 8px;
+  text-transform: uppercase;
 }
 
 .card-body p {
@@ -470,7 +476,7 @@ textarea:focus {
 
 .story {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 4px;
   background: var(--bg-panel-strong);
   padding: 16px;
 }
@@ -490,8 +496,8 @@ textarea:focus {
 
 .panel h3 {
   margin: 0 0 10px;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 16px;
+  text-transform: uppercase;
 }
 
 .actions {
@@ -511,9 +517,9 @@ textarea:focus {
 
 .action-button {
   width: 100%;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--line);
-  background: rgba(7, 13, 20, 0.72);
+  background: rgba(3, 7, 12, 0.86);
   color: var(--text);
   padding: 10px 12px;
   text-align: left;
@@ -533,17 +539,17 @@ textarea:focus {
 .skill-row,
 .inventory-row {
   border: 1px solid var(--line-soft);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 10px;
-  background: rgba(7, 13, 20, 0.62);
+  background: rgba(2, 6, 10, 0.84);
   transition: border-color var(--transition), background var(--transition);
 }
 
 .skill-row.is-changed,
 .inventory-row.is-new,
 .inventory-row.is-increased {
-  border-color: rgba(173, 205, 230, 0.52);
-  background: rgba(38, 64, 90, 0.2);
+  border-color: rgba(240, 165, 99, 0.56);
+  background: rgba(61, 38, 20, 0.35);
 }
 
 .skill-header,
@@ -556,8 +562,8 @@ textarea:focus {
 
 .skill-name,
 .inventory-name {
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 14px;
+  text-transform: uppercase;
 }
 
 .skill-domain,
@@ -589,12 +595,12 @@ textarea:focus {
   display: inline-flex;
   margin-top: 6px;
   border: 1px solid rgba(173, 205, 230, 0.45);
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 2px 8px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #c6e0f5;
+  color: #ffd8ba;
 }
 
 .empty-list {
@@ -626,9 +632,9 @@ textarea:focus {
 
 .loader-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 4px;
   padding: 24px;
-  background: rgba(7, 13, 20, 0.84);
+  background: rgba(3, 7, 12, 0.94);
   text-align: left;
 }
 
@@ -668,9 +674,9 @@ textarea:focus {
 }
 
 .loader-text {
-  font-family: "Plus Jakarta Sans", sans-serif;
   margin-bottom: 8px;
   font-size: 18px;
+  text-transform: uppercase;
 }
 
 .loader-subtext {
@@ -685,8 +691,8 @@ textarea:focus {
 
 .loading-hints-panel h3 {
   margin: 0 0 10px;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 16px;
+  text-transform: uppercase;
 }
 
 .loader-hints {
@@ -706,7 +712,7 @@ textarea:focus {
   bottom: 20px;
   padding: 10px 14px;
   border: 1px solid rgba(227, 180, 145, 0.5);
-  border-radius: 10px;
+  border-radius: 3px;
   background: rgba(36, 24, 20, 0.92);
   color: #f7d3bc;
   z-index: 8;
@@ -725,7 +731,7 @@ textarea:focus {
 .modal-card {
   width: min(520px, 92vw);
   border: 1px solid rgba(229, 165, 127, 0.4);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgba(9, 15, 23, 0.96);
   box-shadow: 0 22px 50px rgba(0, 0, 0, 0.52);
   padding: 20px;
@@ -733,8 +739,8 @@ textarea:focus {
 
 .modal-card h3 {
   margin: 0 0 10px;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 20px;
+  text-transform: uppercase;
 }
 
 .modal-card p {
@@ -778,7 +784,7 @@ textarea:focus {
 }
 
 .metric-row strong {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-weight: 600;
 }
 
 .metric-row.total {
@@ -787,9 +793,9 @@ textarea:focus {
 
 .metrics-card h4 {
   margin: 16px 0 8px;
-  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 14px;
   color: var(--text);
+  text-transform: uppercase;
 }
 
 .metrics-breakdown {
@@ -859,12 +865,28 @@ textarea:focus {
 
 @media (max-width: 680px) {
   #app {
-    padding: 14px;
+    padding: 14px 14px calc(42px + env(safe-area-inset-bottom));
   }
 
   .status-grid {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .top-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .top-controls button {
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+    line-height: 1.15;
+    white-space: normal;
+    text-align: center;
   }
 
   .cards {
