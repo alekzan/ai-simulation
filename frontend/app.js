@@ -12,7 +12,6 @@ const customStory = el("custom-story");
 const startCustomStory = el("start-custom-story");
 const sessionIdEl = el("session-id");
 const turnCounter = el("turn-counter");
-const musicState = el("music-state");
 const sceneText = el("scene-text");
 const sceneImage = el("scene-image");
 const sceneVideo = el("scene-video");
@@ -20,6 +19,8 @@ const sceneImageFallback = el("scene-image-fallback");
 const actionList = el("action-list");
 const customAction = el("custom-action");
 const submitCustom = el("submit-custom");
+const skillsList = el("skills-list");
+const inventoryList = el("inventory-list");
 const loadingText = el("loading-text");
 const loadingSubtext = el("loading-subtext");
 const loadingHints = el("loading-hints");
@@ -50,6 +51,10 @@ const state = {
   transitionHints: [],
   currentMusicPath: null,
   currentTtsPath: null,
+  inventory: [],
+  inventoryDelta: [],
+  skills: [],
+  skillDelta: [],
   simulationMetrics: null,
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
@@ -94,10 +99,6 @@ function loadSettings() {
 
 function updateTopStatus() {
   turnCounter.textContent = `Turn ${state.turnNumber || 1}`;
-}
-
-function setMusicState(label) {
-  musicState.textContent = label;
 }
 
 function _fmt(value) {
@@ -178,6 +179,78 @@ function renderSceneText(text) {
     const p = document.createElement("p");
     p.textContent = trimmed;
     sceneText.appendChild(p);
+  });
+}
+
+function _skillKey(skill) {
+  return `${skill.domain}::${skill.name}`;
+}
+
+function setSkills(skills, skillDelta) {
+  state.skills = Array.isArray(skills) ? skills : [];
+  state.skillDelta = Array.isArray(skillDelta) ? skillDelta : [];
+  const changedByKey = new Map(
+    state.skillDelta.map((row) => [_skillKey(row), row.delta || 0])
+  );
+
+  skillsList.innerHTML = "";
+  if (!state.skills.length) {
+    skillsList.innerHTML = '<div class="empty-list">No skill profile available yet.</div>';
+    return;
+  }
+
+  state.skills.forEach((skill) => {
+    const key = _skillKey(skill);
+    const delta = changedByKey.get(key) || 0;
+    const row = document.createElement("div");
+    row.className = `skill-row${delta !== 0 ? " is-changed" : ""}`;
+    row.innerHTML = `
+      <div class="skill-header">
+        <div>
+          <div class="skill-name">${skill.name}</div>
+          <div class="skill-domain">${skill.domain}</div>
+        </div>
+        <div class="skill-value">Level ${skill.value}/10</div>
+      </div>
+      ${delta !== 0 ? `<div class="skill-delta">${delta > 0 ? "+" : ""}${delta} this turn</div>` : ""}
+    `;
+    skillsList.appendChild(row);
+  });
+}
+
+function setInventory(inventory, inventoryDelta) {
+  state.inventory = Array.isArray(inventory) ? inventory : [];
+  state.inventoryDelta = Array.isArray(inventoryDelta) ? inventoryDelta : [];
+  const deltaByName = new Map(state.inventoryDelta.map((row) => [row.name, row]));
+
+  inventoryList.innerHTML = "";
+  if (!state.inventory.length) {
+    inventoryList.innerHTML = '<div class="empty-list">No items collected yet.</div>';
+    return;
+  }
+
+  state.inventory.forEach((item) => {
+    const delta = deltaByName.get(item.name);
+    const isNew = delta?.change_type === "NEW";
+    const isIncreased = delta?.change_type === "INCREASED";
+    const row = document.createElement("div");
+    row.className = `inventory-row${isNew ? " is-new" : ""}${isIncreased ? " is-increased" : ""}`;
+
+    const badge = isNew
+      ? '<div class="inventory-badge">New this turn</div>'
+      : isIncreased
+      ? '<div class="inventory-badge">Increased this turn</div>'
+      : "";
+
+    row.innerHTML = `
+      <div class="inventory-header">
+        <div class="inventory-name">${item.name}</div>
+        <div class="inventory-count">Count ${item.new_count}</div>
+      </div>
+      ${item.note ? `<div class="inventory-note">${item.note}</div>` : ""}
+      ${badge}
+    `;
+    inventoryList.appendChild(row);
   });
 }
 
@@ -400,8 +473,9 @@ async function startGame(storyText) {
     state.transitionHints = extractHintTexts(data.initial_script?.hints);
     sessionIdEl.textContent = state.sessionId.slice(0, 8);
     updateTopStatus();
-    setMusicState("Initialized");
     setSimulationMetrics(data.simulation_metrics);
+    setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
+    setSkills(data.skills || data.initial_script?.skills || [], data.skill_delta_this_turn || []);
 
     renderScene({
       ...data.initial_scene,
@@ -444,19 +518,20 @@ async function submitAction(actionText) {
     state.turnNumber = data.turn_number || state.turnNumber + 1;
     updateTopStatus();
     setSimulationMetrics(data.simulation_metrics);
+    setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
+    setSkills(data.skills || [], data.skill_delta_this_turn || []);
 
     renderScene(data.scene || {});
     state.transitionHints = extractHintTexts(data.hints);
-
-    const musicChanged = data.scene?.music_action === "CHANGE";
-    setMusicState(musicChanged ? "Transition" : "Stable");
 
     showScreen(sceneScreen);
 
     await playSceneAudio(
       data.scene?.tts_path,
-      musicChanged ? data.scene?.music_path : state.currentMusicPath,
-      musicChanged
+      data.scene?.music_action === "CHANGE"
+        ? data.scene?.music_path
+        : state.currentMusicPath,
+      data.scene?.music_action === "CHANGE"
     );
   } catch (err) {
     showToast(err.message || "Failed to process turn.");
@@ -550,10 +625,15 @@ confirmReset.addEventListener("click", () => {
   state.currentMusicPath = null;
   state.currentTtsPath = null;
   state.transitionHints = [];
+  state.inventory = [];
+  state.inventoryDelta = [];
+  state.skills = [];
+  state.skillDelta = [];
   state.simulationMetrics = null;
+  setInventory([], []);
+  setSkills([], []);
   renderSimulationMetrics(null);
   sessionIdEl.textContent = "--";
-  setMusicState("Idle");
   state.ttsAudio.pause();
   state.ttsAudio.removeAttribute("src");
   state.musicAudio.pause();
@@ -562,6 +642,7 @@ confirmReset.addEventListener("click", () => {
 });
 
 loadSettings();
-setMusicState("Idle");
+setInventory([], []);
+setSkills([], []);
 renderSimulationMetrics(null);
 loadTitleIdeas();

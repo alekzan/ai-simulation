@@ -63,8 +63,7 @@ Inventory changes
   - reason (why it was obtained)
   - note (short hint, not a deterministic instruction)
   - added_turn (current turn number)
-  - image_prompt (item-only prompt: clean prop/product-style render; no scene; no text/letters/numbers/signage/typography/UI; no logos/watermarks)
-- Otherwise (existing item with count staying > 0), omit reason/note/added_turn/image_prompt (set them to null or do not include, per schema).
+- Otherwise (existing item with count staying > 0), omit reason/note/added_turn (set them to null or do not include, per schema).
 
 Skill changes
 - At most 1 skill change per turn.

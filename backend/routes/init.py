@@ -158,5 +158,9 @@ def init_game(payload: InitRequest) -> dict:
         "initial_script": parsed_dict,
         "initial_scene": initial_scene_dict,
         "initial_media": media_paths,
+        "inventory": session_state["inventory"],
+        "inventory_delta_this_turn": [],
+        "skills": session_state["skills"],
+        "skill_delta_this_turn": [],
         "simulation_metrics": session_state["token_usage"],
     }

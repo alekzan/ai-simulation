@@ -47,7 +47,6 @@ failed_inventory_updates = [
         reason=None,
         note=None,
         added_turn=None,
-        image_prompt=None,
     )
 ]
 

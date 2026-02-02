@@ -27,7 +27,6 @@ from backend.schemas import (
 from backend.token_usage import extract_usage_metadata, record_token_usage
 from backend.validation import (
     StructuredOutputValidationError,
-    validate_inventory_image_rules,
     validate_model_json,
 )
 
@@ -75,7 +74,17 @@ def _apply_inventory_changes(
     state: dict,
     changes: list,
 ) -> tuple[list, list[FailedInventoryUpdate]]:
-    inventory = {item["name"]: item for item in state.get("inventory", [])}
+    inventory = {
+        item["name"]: {
+            "name": item.get("name"),
+            "new_count": item.get("new_count", 0),
+            "reason": item.get("reason"),
+            "note": item.get("note"),
+            "added_turn": item.get("added_turn"),
+        }
+        for item in state.get("inventory", [])
+        if item.get("name")
+    }
     failed: list[FailedInventoryUpdate] = []
 
     for change in changes:
@@ -93,7 +102,6 @@ def _apply_inventory_changes(
                     reason=change.reason,
                     note=change.note,
                     added_turn=change.added_turn,
-                    image_prompt=change.image_prompt,
                 )
             )
             continue
@@ -112,7 +120,6 @@ def _apply_inventory_changes(
                     "reason": change.reason,
                     "note": change.note,
                     "added_turn": change.added_turn,
-                    "image_prompt": change.image_prompt,
                 }
             )
         else:
@@ -122,7 +129,6 @@ def _apply_inventory_changes(
                         "reason": prev_item.get("reason"),
                         "note": prev_item.get("note"),
                         "added_turn": prev_item.get("added_turn"),
-                        "image_prompt": prev_item.get("image_prompt"),
                     }
                 )
         inventory[name] = updated
@@ -322,12 +328,14 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         turn_number=next_turn_number,
     )
 
-    # Enforce inventory image_prompt rules based on prior inventory state
-    prior_counts = {item["name"]: item.get("new_count", 0) for item in state.get("inventory", [])}
-    try:
-        validate_inventory_image_rules(parsed.inventory_changes, prior_counts)
-    except StructuredOutputValidationError as exc:
-        return JSONResponse(status_code=422, content=exc.to_error_payload())
+    prior_inventory = {
+        item["name"]: item.get("new_count", 0)
+        for item in state.get("inventory", [])
+    }
+    prior_skills = {
+        (skill["domain"], skill["name"]): skill.get("value", 0)
+        for skill in state.get("skills", [])
+    }
 
     # Apply inventory + skill changes deterministically
     updated_inventory, failed_inventory = _apply_inventory_changes(state, parsed.inventory_changes)
@@ -367,6 +375,36 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
 
     state["inventory"] = updated_inventory
     state["skills"] = updated_skills
+
+    updated_inventory_map = {item["name"]: item for item in updated_inventory}
+    updated_counts = {name: item.get("new_count", 0) for name, item in updated_inventory_map.items()}
+    inventory_delta_this_turn: list[dict[str, Any]] = []
+    for name in sorted(set(prior_inventory) | set(updated_counts)):
+        previous_count = prior_inventory.get(name, 0)
+        new_count = updated_counts.get(name, 0)
+        if previous_count == new_count:
+            continue
+
+        if previous_count == 0 and new_count > 0:
+            change_type = "NEW"
+        elif new_count > previous_count:
+            change_type = "INCREASED"
+        elif new_count == 0 and previous_count > 0:
+            change_type = "REMOVED"
+        else:
+            change_type = "DECREASED"
+
+        inventory_item = updated_inventory_map.get(name, {})
+        inventory_delta_this_turn.append(
+            {
+                "name": name,
+                "previous_count": previous_count,
+                "new_count": new_count,
+                "change_type": change_type,
+                "reason": inventory_item.get("reason"),
+                "note": inventory_item.get("note"),
+            }
+        )
 
     if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
         state["current_music"] = parsed.next_scene.music_prompt
@@ -448,7 +486,19 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         "is_it_ending": parsed.is_it_ending,
         "director_output": _dump_model(parsed),
         "inventory": updated_inventory,
+        "inventory_delta_this_turn": inventory_delta_this_turn,
         "skills": updated_skills,
+        "skill_delta_this_turn": [
+            {
+                "domain": skill["domain"],
+                "name": skill["name"],
+                "previous_value": prior_skills.get((skill["domain"], skill["name"]), 0),
+                "new_value": skill.get("value", 0),
+                "delta": skill.get("value", 0) - prior_skills.get((skill["domain"], skill["name"]), 0),
+            }
+            for skill in updated_skills
+            if skill.get("value", 0) != prior_skills.get((skill["domain"], skill["name"]), 0)
+        ],
         "current_music": state.get("current_music"),
         "simulation_metrics": state.get("token_usage", {}),
     }

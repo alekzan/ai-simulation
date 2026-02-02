@@ -182,15 +182,6 @@ class InventoryChange(BaseModel):
         default=None,
         description="Turn number when the item was first added. Only include when item count increases from 0 or the item is new."
     )
-    image_prompt: Optional[str] = Field(
-        default=None,
-        description=(
-        "Prompt to generate a clean, high-quality image of THIS inventory item only "
-        "(single item product-style or prop-style). "
-        "No text, no logos, no watermarks, no letters, no numbers, no signage, no UI. "
-        "Only include when item count increases from 0 or the item is new."
-        )
-    )
 
 class SkillChange(BaseModel):
     domain: Literal["SENSE", "TALK", "MOVE", "MAKE", "ENDURE"] = Field(
@@ -319,10 +310,6 @@ class FailedInventoryUpdate(BaseModel):
     added_turn: Optional[int] = Field(
         default=None,
         description="Turn number when the item was first added to inventory. Only present when item is new or increases from 0.",
-    )
-    image_prompt: Optional[str] = Field(
-        default=None,
-        description="Optional prompt to render this inventory item visually (only when item is new).",
     )
 
 

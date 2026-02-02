@@ -7,7 +7,6 @@ sys.path.insert(0, str(ROOT_DIR))
 from backend.schemas import TitleScreenSelectorOutput, InitialScriptOutput, InventoryChange
 from backend.validation import (
     StructuredOutputValidationError,
-    validate_inventory_image_rules,
     validate_model_json,
 )
 
@@ -36,58 +35,20 @@ def test_initial_script_invalid() -> None:
     raise AssertionError("Expected StructuredOutputValidationError")
 
 
-def test_inventory_image_prompt_rules() -> None:
-    prior_counts = {"Keycard": 0, "Matchbook": 1}
-
-    valid_new = [
-        InventoryChange(
-            name="Keycard",
-            new_count=1,
-            reason="Found under the counter.",
-            note="Access to restricted doors.",
-            added_turn=2,
-            image_prompt="Single brass keycard on a dark felt surface, high detail.",
-        )
-    ]
-    validate_inventory_image_rules(valid_new, prior_counts)
-
-    invalid_missing = [
-        InventoryChange(
-            name="Keycard",
-            new_count=1,
-            reason="Found under the counter.",
-            note="Access to restricted doors.",
-            added_turn=2,
-            image_prompt=None,
-        )
-    ]
-    try:
-        validate_inventory_image_rules(invalid_missing, prior_counts)
-    except StructuredOutputValidationError:
-        pass
-    else:
-        raise AssertionError("Expected image_prompt missing violation")
-
-    invalid_extra = [
-        InventoryChange(
-            name="Matchbook",
-            new_count=1,
-            reason=None,
-            note=None,
-            added_turn=None,
-            image_prompt="Single matchbook on wood table.",
-        )
-    ]
-    try:
-        validate_inventory_image_rules(invalid_extra, prior_counts)
-    except StructuredOutputValidationError:
-        pass
-    else:
-        raise AssertionError("Expected image_prompt extra violation")
+def test_inventory_change_schema_text_only() -> None:
+    valid = InventoryChange(
+        name="Keycard",
+        new_count=1,
+        reason="Found under the counter.",
+        note="Access to restricted doors.",
+        added_turn=2,
+    )
+    assert valid.name == "Keycard"
+    assert valid.new_count == 1
 
 
 if __name__ == "__main__":
     test_title_selector_valid()
     test_initial_script_invalid()
-    test_inventory_image_prompt_rules()
+    test_inventory_change_schema_text_only()
     print("validation_smoke: ok")
