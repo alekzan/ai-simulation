@@ -13,13 +13,13 @@ DEFAULT_THINKING_LEVEL = "minimal"
 PRODUCTION_DEFAULT_THINKING_LEVEL = "high"
 
 
-def get_genai_client(api_version: Optional[str] = None) -> genai.Client:
+def get_genai_client(api_version: Optional[str] = None, api_key: Optional[str] = None) -> genai.Client:
     root_dir = Path(__file__).resolve().parents[2]
     load_dotenv(root_dir / ".env")
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    resolved_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     kwargs = {}
-    if api_key:
-        kwargs["api_key"] = api_key
+    if resolved_api_key:
+        kwargs["api_key"] = resolved_api_key
     if api_version:
         kwargs["http_options"] = {"api_version": api_version}
     return genai.Client(**kwargs)

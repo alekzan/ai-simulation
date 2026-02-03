@@ -29,8 +29,8 @@ def _relative_path(path: Path) -> Path:
         return path
 
 
-def generate_scene_image(prompt: str, filename: str = "scene.png") -> Path:
-    client = get_genai_client()
+def generate_scene_image(prompt: str, filename: str = "scene.png", api_key: Optional[str] = None) -> Path:
+    client = get_genai_client(api_key=api_key)
 
     chat = client.chats.create(
         model="gemini-2.5-flash-image",
@@ -68,8 +68,8 @@ def _write_wav(path: Path, pcm: bytes, channels: int = 1, rate: int = 24000, sam
         wf.writeframes(pcm)
 
 
-def generate_tts(text: str, filename: str = "narrator.wav") -> Path:
-    client = get_genai_client()
+def generate_tts(text: str, filename: str = "narrator.wav", api_key: Optional[str] = None) -> Path:
+    client = get_genai_client(api_key=api_key)
 
     tts_text = text if text.strip().lower().startswith("say:") else f"Say: {text}"
 
@@ -96,8 +96,13 @@ def generate_tts(text: str, filename: str = "narrator.wav") -> Path:
     return _relative_path(out_path)
 
 
-async def _generate_music_async(prompt: str, filename: str = "music.wav", duration_seconds: int = 20) -> Path:
-    client = get_genai_client(api_version="v1alpha")
+async def _generate_music_async(
+    prompt: str,
+    filename: str = "music.wav",
+    duration_seconds: int = 20,
+    api_key: Optional[str] = None,
+) -> Path:
+    client = get_genai_client(api_version="v1alpha", api_key=api_key)
 
     sample_rate = 48000
     channels = 2
@@ -142,7 +147,12 @@ async def _generate_music_async(prompt: str, filename: str = "music.wav", durati
     return _relative_path(out_path)
 
 
-def generate_music(prompt: str, filename: str = "music.wav", duration_seconds: int = 20) -> Path:
+def generate_music(
+    prompt: str,
+    filename: str = "music.wav",
+    duration_seconds: int = 20,
+    api_key: Optional[str] = None,
+) -> Path:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -150,14 +160,14 @@ def generate_music(prompt: str, filename: str = "music.wav", duration_seconds: i
 
     if loop and loop.is_running():
         return asyncio.run_coroutine_threadsafe(
-            _generate_music_async(prompt, filename, duration_seconds), loop
+            _generate_music_async(prompt, filename, duration_seconds, api_key), loop
         ).result()
 
-    return asyncio.run(_generate_music_async(prompt, filename, duration_seconds))
+    return asyncio.run(_generate_music_async(prompt, filename, duration_seconds, api_key))
 
 
-def _generate_first_frame(prompt: str) -> types.Image:
-    client = get_genai_client()
+def _generate_first_frame(prompt: str, api_key: Optional[str] = None) -> types.Image:
+    client = get_genai_client(api_key=api_key)
     image_resp = client.models.generate_content(
         model="gemini-2.5-flash-image",
         contents=prompt,
@@ -184,9 +194,10 @@ def generate_ending_video(
     prompt: str,
     filename: str = "ending.mp4",
     first_frame_path: Optional[Path] = None,
+    api_key: Optional[str] = None,
 ) -> Path:
     # Veo preview features can vary by API version; prefer v1alpha with fallback.
-    client = get_genai_client(api_version="v1alpha")
+    client = get_genai_client(api_version="v1alpha", api_key=api_key)
 
     if first_frame_path is not None:
         resolved_first = first_frame_path
@@ -195,9 +206,9 @@ def generate_ending_video(
         if resolved_first.exists():
             first_frame = types.Image.from_file(location=str(resolved_first))
         else:
-            first_frame = _generate_first_frame(prompt)
+            first_frame = _generate_first_frame(prompt, api_key=api_key)
     else:
-        first_frame = _generate_first_frame(prompt)
+        first_frame = _generate_first_frame(prompt, api_key=api_key)
 
     operation_kwargs = {
         "model": "veo-3.1-fast-generate-preview",
@@ -213,7 +224,7 @@ def generate_ending_video(
         operation = _poll_until_done(client, operation)
     except Exception:
         # Retry once on default API version in case account/project is configured there.
-        client = get_genai_client()
+        client = get_genai_client(api_key=api_key)
         operation = _start_generation(client)
         operation = _poll_until_done(client, operation)
 

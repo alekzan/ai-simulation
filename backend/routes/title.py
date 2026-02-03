@@ -4,13 +4,14 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from google.genai import types
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.media import generate_scene_image
 from backend.prompts.title_screen_selector import PROMPT
+from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import TitleScreenSelectorOutput
 from backend.validation import StructuredOutputValidationError, validate_model_json
 
@@ -79,8 +80,8 @@ def _build_title_generation_contents() -> str:
     return PROMPT + diversity_directive
 
 
-def _generate_title_ideas() -> TitleScreenSelectorOutput:
-    client = get_genai_client()
+def _generate_title_ideas(api_key: str) -> TitleScreenSelectorOutput:
+    client = get_genai_client(api_key=api_key)
 
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
@@ -96,7 +97,11 @@ def _generate_title_ideas() -> TitleScreenSelectorOutput:
 
 
 @router.post("/title-options")
-def title_options() -> dict:
+def title_options(request: Request) -> dict:
+    api_key = get_request_api_key(request)
+    if not api_key:
+        return missing_api_key_response()
+
     if _use_dev_fixed_titles():
         return {
             "ideas": [
@@ -111,22 +116,36 @@ def title_options() -> dict:
         }
 
     try:
-        parsed = _generate_title_ideas()
+        parsed = _generate_title_ideas(api_key)
     except StructuredOutputValidationError as exc:
         return JSONResponse(status_code=422, content=exc.to_error_payload())
+    except Exception as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
+        )
 
     return parsed.model_dump()
 
 
 @router.post("/title-options-with-covers")
-def title_options_with_covers() -> dict:
+def title_options_with_covers(request: Request) -> dict:
+    api_key = get_request_api_key(request)
+    if not api_key:
+        return missing_api_key_response()
+
     if _use_dev_fixed_titles():
         return {"ideas": _dev_fixed_ideas()}
 
     try:
-        parsed = _generate_title_ideas()
+        parsed = _generate_title_ideas(api_key)
     except StructuredOutputValidationError as exc:
         return JSONResponse(status_code=422, content=exc.to_error_payload())
+    except Exception as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
+        )
 
     batch_id = uuid4().hex[:8]
     cover_paths: dict[str, str | None] = {idea.id: None for idea in parsed.ideas}
@@ -137,6 +156,7 @@ def title_options_with_covers() -> dict:
                     generate_scene_image,
                     idea.cover_image_prompt,
                     f"title_{batch_id}_{idea.id}.png",
+                    api_key,
                 )
                 for idea in parsed.ideas
             }

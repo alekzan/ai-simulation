@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from google.genai import types
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
 from backend.media import generate_ending_video, generate_music, generate_scene_image, generate_tts
 from backend.prompts.narrator_director import STATIC_PROMPT
+from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.prompts.state_canonicalizer import STATE_CANONICALIZER_SYSTEM
 from backend.prompts.story_memory_summarizer import SYSTEM_INSTRUCTION as STORY_MEMORY_SYSTEM
 from backend.schemas import (
@@ -281,8 +282,9 @@ def _run_canonicalizer(
     failed_skill_update: Optional[FailedSkillUpdate],
     scene_excerpt: Optional[str],
     player_action: Optional[str],
+    api_key: str,
 ) -> tuple[CanonicalizerOutput, dict[str, int]]:
-    client = get_genai_client()
+    client = get_genai_client(api_key=api_key)
 
     payload = CanonicalizerInput(
         canonical_inventory=canonical_inventory,
@@ -308,7 +310,7 @@ def _run_canonicalizer(
     return parsed, extract_usage_metadata(response)
 
 
-def _summarize_story_memory(session_id: str) -> None:
+def _summarize_story_memory(session_id: str, api_key: str) -> None:
     record = get_session(session_id)
     if record is None:
         return
@@ -340,17 +342,20 @@ def _summarize_story_memory(session_id: str) -> None:
         current_story_memory=None,
     )
 
-    client = get_genai_client()
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        config=types.GenerateContentConfig(
-            system_instruction=STORY_MEMORY_SYSTEM,
-            response_mime_type="application/json",
-            response_json_schema=StoryMemorySummarizerOutput.model_json_schema(),
-            thinking_config=get_thinking_config(),
-        ),
-        contents=json.dumps(_dump_model(payload), ensure_ascii=False),
-    )
+    client = get_genai_client(api_key=api_key)
+    try:
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            config=types.GenerateContentConfig(
+                system_instruction=STORY_MEMORY_SYSTEM,
+                response_mime_type="application/json",
+                response_json_schema=StoryMemorySummarizerOutput.model_json_schema(),
+                thinking_config=get_thinking_config(),
+            ),
+            contents=json.dumps(_dump_model(payload), ensure_ascii=False),
+        )
+    except Exception:
+        return
 
     try:
         parsed = validate_model_json(response.text, StoryMemorySummarizerOutput)
@@ -368,7 +373,11 @@ def _summarize_story_memory(session_id: str) -> None:
 
 
 @router.post("/turn")
-def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
+def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: Request) -> dict:
+    api_key = get_request_api_key(request)
+    if not api_key:
+        return missing_api_key_response()
+
     record = get_session(payload.session_id)
     if record is None:
         return JSONResponse(
@@ -433,17 +442,23 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             "- Return no further action options\n"
         )
 
-    client = get_genai_client()
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        config=types.GenerateContentConfig(
-            system_instruction=STATIC_PROMPT,
-            response_mime_type="application/json",
-            response_json_schema=DirectorNarratorOutput.model_json_schema(),
-            thinking_config=get_thinking_config(),
-        ),
-        contents=dynamic_context,
-    )
+    client = get_genai_client(api_key=api_key)
+    try:
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            config=types.GenerateContentConfig(
+                system_instruction=STATIC_PROMPT,
+                response_mime_type="application/json",
+                response_json_schema=DirectorNarratorOutput.model_json_schema(),
+                thinking_config=get_thinking_config(),
+            ),
+            contents=dynamic_context,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
+        )
 
     try:
         parsed = validate_model_json(response.text, DirectorNarratorOutput)
@@ -480,14 +495,21 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         for skill in state.get("skills", []):
             canonical_skills_by_domain.setdefault(skill["domain"], []).append(skill["name"])
 
-        canonical_out, canonicalizer_usage = _run_canonicalizer(
-            canonical_inventory=canonical_inventory,
-            canonical_skills_by_domain=canonical_skills_by_domain,
-            failed_inventory_updates=failed_inventory,
-            failed_skill_update=failed_skill,
-            scene_excerpt=parsed.next_scene.text_story[:300],
-            player_action=player_action,
-        )
+        try:
+            canonical_out, canonicalizer_usage = _run_canonicalizer(
+                canonical_inventory=canonical_inventory,
+                canonical_skills_by_domain=canonical_skills_by_domain,
+                failed_inventory_updates=failed_inventory,
+                failed_skill_update=failed_skill,
+                scene_excerpt=parsed.next_scene.text_story[:300],
+                player_action=player_action,
+                api_key=api_key,
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
+            )
         record_token_usage(
             state,
             "canonicalizer",
@@ -570,6 +592,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             ending_frame_path = generate_scene_image(
                 ending_image_prompt or parsed.next_scene.media_prompt,
                 f"{session_slug}_ending_frame_{next_turn_number}.png",
+                api_key=api_key,
             )
             media_paths["image_path"] = str(ending_frame_path)
             ending_prompt = _build_ending_video_prompt(
@@ -580,6 +603,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
                 ending_prompt,
                 f"{session_slug}_ending_{next_turn_number}.mp4",
                 Path(ending_frame_path),
+                api_key=api_key,
             )
             media_paths["video_path"] = str(video_path)
         else:
@@ -590,17 +614,21 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
                         generate_scene_image,
                         parsed.next_scene.media_prompt,
                         f"{session_slug}_scene_{next_turn_number}.png",
+                        api_key,
                     )
                 futures["tts_path"] = executor.submit(
                     generate_tts,
                     parsed.next_scene.text_story,
                     f"{session_slug}_tts_{next_turn_number}.wav",
+                    api_key,
                 )
                 if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
                     futures["music_path"] = executor.submit(
                         generate_music,
                         parsed.next_scene.music_prompt,
                         f"{session_slug}_music_{next_turn_number}.wav",
+                        20,
+                        api_key,
                     )
 
                 for key, future in futures.items():
@@ -635,7 +663,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
     save_session(payload.session_id, state)
 
     if next_turn_number == 13 and not parsed.is_game_over:
-        background_tasks.add_task(_summarize_story_memory, payload.session_id)
+        background_tasks.add_task(_summarize_story_memory, payload.session_id, api_key)
 
     return {
         "session_id": payload.session_id,

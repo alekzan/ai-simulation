@@ -3,7 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional, Dict, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from google.genai import types
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from backend.clients import get_genai_client, get_thinking_config
 from backend.db import create_session, save_session
 from backend.media import generate_music, generate_scene_image, generate_tts
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
+from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import InitialScriptOutput
 from backend.token_usage import extract_usage_metadata, record_token_usage
 from backend.validation import StructuredOutputValidationError, validate_model_json
@@ -35,29 +36,39 @@ def _session_slug(session_id: str) -> str:
 
 
 @router.post("/init")
-def init_game(payload: InitRequest) -> dict:
+def init_game(payload: InitRequest, request: Request) -> dict:
+    api_key = get_request_api_key(request)
+    if not api_key:
+        return missing_api_key_response()
+
     target_turns_hint = {
         "SHORT": 10,
         "LONG": 20,
         "INFINITE": None,
     }[payload.game_length_mode]
 
-    client = get_genai_client()
+    client = get_genai_client(api_key=api_key)
 
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            response_mime_type="application/json",
-            response_json_schema=InitialScriptOutput.model_json_schema(),
-            thinking_config=get_thinking_config(),
-        ),
-        contents=(
-            f"Initial scenario (chosen by the player): {payload.story_text}\n"
-            f"Game length mode: {payload.game_length_mode}\n"
-            f"Target turns (hint, not mandatory): {target_turns_hint}"
-        ),
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+                response_json_schema=InitialScriptOutput.model_json_schema(),
+                thinking_config=get_thinking_config(),
+            ),
+            contents=(
+                f"Initial scenario (chosen by the player): {payload.story_text}\n"
+                f"Game length mode: {payload.game_length_mode}\n"
+                f"Target turns (hint, not mandatory): {target_turns_hint}"
+            ),
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
+        )
 
     try:
         parsed = validate_model_json(response.text, InitialScriptOutput)
@@ -122,16 +133,20 @@ def init_game(payload: InitRequest) -> dict:
                 generate_scene_image,
                 initial_scene.image_prompt,
                 f"{session_slug}_scene_1.png",
+                api_key,
             )
             futures["tts_path"] = executor.submit(
                 generate_tts,
                 initial_scene.text_story,
                 f"{session_slug}_tts_1.wav",
+                api_key,
             )
             futures["music_path"] = executor.submit(
                 generate_music,
                 initial_scene.music_prompt,
                 f"{session_slug}_music_1.wav",
+                20,
+                api_key,
             )
             for key, future in futures.items():
                 result = future.result()

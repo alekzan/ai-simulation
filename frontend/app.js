@@ -1,13 +1,17 @@
 const API_BASE = "";
 
 const el = (id) => document.getElementById(id);
+const apiKeyScreen = el("screen-api-key");
 const titleScreen = el("screen-title");
 const sceneScreen = el("screen-scene");
 const loadingScreen = el("screen-loading");
 const topbar = el("topbar");
 const titleCards = el("title-cards");
 const lengthToggle = el("length-toggle");
+const changeApiKey = el("change-api-key");
 const refreshTitles = el("refresh-titles");
+const apiKeyInput = el("api-key-input");
+const saveApiKey = el("save-api-key");
 const customStory = el("custom-story");
 const startCustomStory = el("start-custom-story");
 const sessionIdEl = el("session-id");
@@ -44,6 +48,7 @@ const metricTotal = el("metric-total");
 const metricsBreakdown = el("metrics-breakdown");
 
 const state = {
+  apiKey: null,
   sessionId: null,
   turnNumber: 0,
   gameOver: false,
@@ -91,6 +96,21 @@ function setToggleState(button, label, isMuted) {
 function persistSettings() {
   localStorage.setItem("ttsMuted", JSON.stringify(state.ttsMuted));
   localStorage.setItem("musicMuted", JSON.stringify(state.musicMuted));
+}
+
+function persistApiKey() {
+  if (!state.apiKey) return;
+  localStorage.setItem("geminiApiKey", state.apiKey);
+}
+
+function clearApiKey() {
+  state.apiKey = null;
+  localStorage.removeItem("geminiApiKey");
+}
+
+function loadApiKey() {
+  const stored = localStorage.getItem("geminiApiKey");
+  state.apiKey = stored && stored.trim() ? stored.trim() : null;
 }
 
 function loadSettings() {
@@ -144,13 +164,21 @@ function setSimulationMetrics(metrics) {
 }
 
 function showScreen(screen) {
-  [titleScreen, sceneScreen, loadingScreen].forEach((node) =>
+  [apiKeyScreen, titleScreen, sceneScreen, loadingScreen].forEach((node) =>
     node.classList.add("hidden")
   );
   screen.classList.remove("hidden");
 
   const showTopbar = screen === sceneScreen || (screen === loadingScreen && !!state.sessionId);
   topbar.classList.toggle("hidden", !showTopbar);
+}
+
+function openApiKeyScreen({ clearStored = false } = {}) {
+  if (clearStored) {
+    clearApiKey();
+  }
+  apiKeyInput.value = "";
+  showScreen(apiKeyScreen);
 }
 
 function setLoading(message, hints, subtext) {
@@ -367,9 +395,13 @@ function renderTitleCards(ideas) {
 }
 
 async function fetchJson(url, payload = null) {
+  const headers = { "Content-Type": "application/json" };
+  if (state.apiKey) {
+    headers["X-Gemini-Api-Key"] = state.apiKey;
+  }
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: payload ? JSON.stringify(payload) : null,
   });
 
@@ -384,7 +416,13 @@ async function fetchJson(url, payload = null) {
 async function fetchSimulationMetrics(sessionId) {
   if (!sessionId) return;
   try {
-    const response = await fetch(`${API_BASE}/api/simulation-metrics/${sessionId}`);
+    const headers = {};
+    if (state.apiKey) {
+      headers["X-Gemini-Api-Key"] = state.apiKey;
+    }
+    const response = await fetch(`${API_BASE}/api/simulation-metrics/${sessionId}`, {
+      headers,
+    });
     if (!response.ok) return;
     const data = await response.json();
     if (data?.simulation_metrics) {
@@ -638,8 +676,30 @@ refreshTitles.addEventListener("click", () => {
   loadTitleIdeas();
 });
 
+changeApiKey.addEventListener("click", () => {
+  openApiKeyScreen({ clearStored: true });
+});
+
 startCustomStory.addEventListener("click", () => {
   startGame(customStory.value);
+});
+
+saveApiKey.addEventListener("click", async () => {
+  const key = apiKeyInput.value.trim();
+  if (!key) {
+    showToast("Enter a Gemini API key to proceed.");
+    return;
+  }
+  state.apiKey = key;
+  persistApiKey();
+  apiKeyInput.value = "";
+  await loadTitleIdeas();
+});
+
+apiKeyInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    saveApiKey.click();
+  }
 });
 
 submitCustom.addEventListener("click", () => {
@@ -711,8 +771,13 @@ startNewSimulation.addEventListener("click", () => {
 });
 
 loadSettings();
+loadApiKey();
 setInventory([], []);
 setSkills([], []);
 renderSimulationMetrics(null);
 setActionInputState(false);
-loadTitleIdeas();
+if (state.apiKey) {
+  loadTitleIdeas();
+} else {
+  openApiKeyScreen();
+}

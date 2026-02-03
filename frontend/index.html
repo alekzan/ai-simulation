@@ -39,7 +39,39 @@
       </header>
 
       <main>
-        <section id="screen-title" class="screen screen-title">
+        <section id="screen-api-key" class="screen screen-api-key">
+          <div class="panel api-key-card">
+            <p class="eyebrow">SIMULATION ACCESS</p>
+            <h1>Authorize your simulation core.</h1>
+            <p class="lead">
+              Enter your Gemini API key to energize this reality engine.
+              You can
+              <a
+                class="inline-link"
+                href="https://ai.google.dev/gemini-api/docs/api-key"
+                target="_blank"
+                rel="noopener noreferrer"
+                >create one in Gemini API Studio</a
+              >.
+            </p>
+
+            <div class="divider"></div>
+
+            <label for="api-key-input">Gemini API key</label>
+            <input
+              id="api-key-input"
+              class="api-key-input"
+              type="password"
+              placeholder="Paste your key here..."
+              autocomplete="off"
+            />
+            <div class="controls">
+              <button id="save-api-key" class="primary">Initialize simulation access</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-title" class="screen screen-title hidden">
           <div class="title-controls panel">
             <p class="eyebrow">SIMULATION CONTROL</p>
             <h1>Select or author a monitored reality.</h1>
@@ -73,9 +105,9 @@
 
           <div class="title-ideas panel">
             <div class="title-ideas-header">
-              <h2>Generated story options</h2>
+              <h2>Pre-generation simulation options</h2>
               <div class="title-ideas-meta">
-                <span class="caption">3 scenarios / image covers generated in parallel</span>
+                <button id="change-api-key" class="ghost">Change API key</button>
                 <button id="refresh-titles" class="ghost">Regenerate ideas</button>
               </div>
             </div>

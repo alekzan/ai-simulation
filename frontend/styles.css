@@ -373,6 +373,37 @@ textarea:focus {
   gap: 12px;
 }
 
+.api-key-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  background: rgba(2, 5, 9, 0.8);
+  padding: 12px;
+  line-height: 1.4;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: rgba(168, 199, 226, 0.42);
+}
+
+.inline-link {
+  color: #ffd8ba;
+  text-underline-offset: 2px;
+}
+
+.screen-api-key {
+  min-height: 74vh;
+  display: grid;
+  place-items: center;
+}
+
+.api-key-card {
+  width: min(720px, 94vw);
+  padding: 24px;
+}
+
 .card {
   border: 1px solid var(--line-soft);
   border-radius: 4px;
