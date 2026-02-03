@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -23,30 +24,59 @@ def _is_development_mode() -> bool:
     return env not in {"production", "prod"}
 
 
+def _use_dev_fixed_titles() -> bool:
+    import os
+
+    if not _is_development_mode():
+        return False
+    raw = os.getenv("TITLE_DEV_FIXED_OPTIONS", "true").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _dev_fixed_ideas() -> list[dict]:
     return [
         {
             "id": "A",
-            "title": "Neon Ghost Protocol",
-            "one_liner": "A sentient virus has locked down the city's neural network, and your consciousness is the next target for deletion.",
+            "title": "Velvet Coup",
+            "one_liner": "On gala night, you must unmask a palace conspiracy before dawn crowns the wrong heir.",
             "cover_image_prompt": "",
             "cover_image_path": "media/images/title_acff3de5_A.png",
         },
         {
             "id": "B",
-            "title": "The Last Ember of Solace",
-            "one_liner": "The eternal winter is snuffing out the world's final heat source, and the mountain tribe believes you are the sacrifice required to restart the sun.",
+            "title": "Last Train to Aragon",
+            "one_liner": "A stolen ledger and one overnight train decide whether your family name survives the morning papers.",
             "cover_image_prompt": "",
             "cover_image_path": "media/images/title_acff3de5_B.png",
         },
         {
             "id": "C",
-            "title": "Deep Void Salvage",
-            "one_liner": "Your derelict scouting vessel is being pulled into a sentient black hole that feeds on the memories of its passengers.",
+            "title": "Ashes at Noon",
+            "one_liner": "As wildfire surrounds your town, you must choose who gets the last safe route out.",
             "cover_image_prompt": "",
             "cover_image_path": "media/images/title_acff3de5_C.png",
         },
     ]
+
+
+def _build_title_generation_contents() -> str:
+    genre_triplets = [
+        ("political thriller", "historical drama", "survival adventure"),
+        ("heist thriller", "fantasy court intrigue", "grounded mystery"),
+        ("sports drama", "period adventure", "crime procedural"),
+        ("romantic drama", "expedition adventure", "urban mystery"),
+        ("spy thriller", "family drama", "frontier western"),
+    ]
+    g1, g2, g3 = random.choice(genre_triplets)
+    diversity_directive = (
+        "\n\nDIVERSITY ENFORCEMENT\n"
+        "Generate one idea per slot with distinct primary genres:\n"
+        f"- Idea A primary genre: {g1}\n"
+        f"- Idea B primary genre: {g2}\n"
+        f"- Idea C primary genre: {g3}\n"
+        "Do not duplicate a primary genre across slots.\n"
+    )
+    return PROMPT + diversity_directive
 
 
 def _generate_title_ideas() -> TitleScreenSelectorOutput:
@@ -54,7 +84,7 @@ def _generate_title_ideas() -> TitleScreenSelectorOutput:
 
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
-        contents=PROMPT,
+        contents=_build_title_generation_contents(),
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_json_schema=TitleScreenSelectorOutput.model_json_schema(),
@@ -67,7 +97,7 @@ def _generate_title_ideas() -> TitleScreenSelectorOutput:
 
 @router.post("/title-options")
 def title_options() -> dict:
-    if _is_development_mode():
+    if _use_dev_fixed_titles():
         return {
             "ideas": [
                 {
@@ -90,7 +120,7 @@ def title_options() -> dict:
 
 @router.post("/title-options-with-covers")
 def title_options_with_covers() -> dict:
-    if _is_development_mode():
+    if _use_dev_fixed_titles():
         return {"ideas": _dev_fixed_ideas()}
 
     try:

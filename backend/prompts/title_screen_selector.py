@@ -8,7 +8,9 @@ RULES
 - Provide exactly 3 ideas.
 - Each title must be 2–6 words.
 - Each one_liner must be ONE single line (no line breaks), and must imply a problem or danger.
-- The three ideas must be diverse in setting/genre (avoid overlap).
+- The three ideas must be clearly different in setting and genre (avoid overlap).
+- Avoid repetitive title patterns (for example: repeated "Protocol", repeated "Project", repeated "Last X").
+- Keep at least 2 ideas in non-sci-fi and non-horror genres unless explicitly requested otherwise.
 - Do not include lists, bullets, or commentary.
 
 COVER IMAGE PROMPT RULES

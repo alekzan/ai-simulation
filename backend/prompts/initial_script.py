@@ -32,6 +32,11 @@ You receive:
 - The chosen or randomized initial scenario. Do not assume any future player actions.
 - Game length mode: SHORT (~10 turns), LONG (~20 turns), or INFINITE (no forced ending). Treat it as a pacing hint, not a strict rule.
 
+Genre lock:
+- Extract the implied genre/tone from the provided scenario and keep it coherent.
+- Do not inject sci-fi, horror, monsters, mutation, cosmic entities, or high-tech dystopia unless the scenario explicitly points there.
+- If the seed is grounded (e.g., drama, historical, crime, adventure, romance, mystery), keep the story grounded.
+
 ---
 
 ## 3. Core outputs (STRUCTURE)
@@ -41,6 +46,7 @@ A. Central dramatic concept
 
 B. Core plot (INTERNAL ONLY, not player-visible)  
 - Write a 1–2 paragraph causal narrative spine: what is really going on, why the situation is tense, and what pressure will force resolution.  
+- The causal spine must stay faithful to the seed genre and not pivot into unrelated genre tropes.
 - Do NOT write scenes, dialogue, action instructions, or step-by-step plans.  
 - This exists to guide the Narrative Director, so do not dump it into the initial scene.
 

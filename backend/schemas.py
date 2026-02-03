@@ -25,7 +25,10 @@ class TitleIdea(BaseModel):
     id: Literal["A", "B", "C"] = Field(description="Stable identifier for UI selection.")
     title: str = Field(description="Short, catchy game title (2–6 words).")
     one_liner: str = Field(
-        description="Single-line story hook. Must imply a problem/danger. No line breaks."
+        description=(
+            "Single-line story hook. Must imply a problem/danger. No line breaks. "
+            "Should clearly signal a specific genre/setting."
+        )
     )
     cover_image_prompt: str = Field(
         description=(
@@ -38,7 +41,10 @@ class TitleIdea(BaseModel):
 
 class TitleScreenSelectorOutput(BaseModel):
     ideas: List[TitleIdea] = Field(
-        description="Exactly 3 title ideas with title, one-liner, and cover image prompt."
+        description=(
+            "Exactly 3 title ideas with title, one-liner, and cover image prompt. "
+            "Ideas must be distinct in setting/genre."
+        )
     )
 
 # ===========================================================================
