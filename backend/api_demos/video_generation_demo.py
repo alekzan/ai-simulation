@@ -58,7 +58,7 @@ def generate_first_frame_with_gemini(client: genai.Client, prompt: str) -> types
 
 def load_first_frame_from_file(img_path: Path) -> types.Image:
     # This is the cleanest way: the SDK builds bytesBase64Encoded + mimeType internally.
-    return types.Image.from_file(str(img_path))
+    return types.Image.from_file(location=str(img_path))
 
 
 def generate_video_from_first_frame(

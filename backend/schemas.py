@@ -157,6 +157,20 @@ class NextScene(BaseModel):
     media_prompt: str = Field(
         description="Prompt for the reference image (or ending video). No text, no logos, no watermarks, no letters, no numbers, no signage, no UI."
     )
+    ending_image_prompt: Optional[str] = Field(
+        default=None,
+        description=(
+            "Required when is_it_ending=true. Prompt for the generated first frame image of the ending video. "
+            "Must match the same characters/location/style as ending_video_prompt. No text, no logos, no UI."
+        ),
+    )
+    ending_video_prompt: Optional[str] = Field(
+        default=None,
+        description=(
+            "Required when is_it_ending=true. Prompt for Veo continuation using the ending_image_prompt frame. "
+            "Must conclude the final beat and include explicit audio cues (ambience, SFX, music/no music)."
+        ),
+    )
     action_options: List[ActionOption] = Field(
         description="Exactly 3 suggested first-person actions: one safe, one risky, one unexpected."
     )
@@ -219,7 +233,7 @@ class DirectorNarratorOutput(BaseModel):
         description="True only if there is absolutely nothing left to do (e.g., death with no continuation)."
     )
     is_it_ending: bool = Field(
-        description="True only if an ending is reached and the ending workflow should run (video)."
+        description="True only if an ending is reached and the ending workflow should run (video). When true, next_scene must include ending_image_prompt and ending_video_prompt."
     )
 
 # ===========================================================================

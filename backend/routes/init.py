@@ -83,6 +83,7 @@ def init_game(payload: InitRequest) -> dict:
         "skills": [_dump_model(skill) for skill in parsed.skills],
         "inventory": [],
         "current_music": initial_scene.music_prompt,
+        "is_game_over": False,
         "turn_number": 1,
         "game_length_mode": payload.game_length_mode,
         "target_turns_hint": target_turns_hint,
@@ -108,7 +109,12 @@ def init_game(payload: InitRequest) -> dict:
     session_slug = _session_slug(session_id)
 
     # Generate initial media in parallel using session-scoped filenames.
-    media_paths: Dict[str, Optional[str]] = {"image_path": None, "tts_path": None, "music_path": None}
+    media_paths: Dict[str, Optional[str]] = {
+        "image_path": None,
+        "video_path": None,
+        "tts_path": None,
+        "music_path": None,
+    }
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures: Dict[str, Any] = {}
@@ -146,6 +152,7 @@ def init_game(payload: InitRequest) -> dict:
             "media": {
                 "media_type": "image",
                 "image_path": media_paths["image_path"],
+                "video_path": None,
                 "tts_path": media_paths["tts_path"],
                 "music_path": media_paths["music_path"],
             },
@@ -158,6 +165,7 @@ def init_game(payload: InitRequest) -> dict:
         "initial_script": parsed_dict,
         "initial_scene": initial_scene_dict,
         "initial_media": media_paths,
+        "is_game_over": False,
         "inventory": session_state["inventory"],
         "inventory_delta_this_turn": [],
         "skills": session_state["skills"],

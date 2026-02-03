@@ -27,6 +27,17 @@ MEDIA PROMPT RULES
 - Any media_prompt must contain NO text of any kind: no letters, no numbers, no signage, no typography, no UI.
 - No logos, no watermarks.
 
+ENDING MEDIA RULES (MANDATORY WHEN is_it_ending=true)
+- You must output both:
+  - ending_image_prompt: opening frame of the final sequence.
+  - ending_video_prompt: continuation/conclusion prompt aligned with ending_image_prompt.
+- ending_image_prompt and ending_video_prompt must describe the same scene continuity:
+  same characters, same location, same time-of-day, same visual style.
+- ending_video_prompt must include explicit audio cues:
+  ambience, key sound effects, and music/no music direction.
+- Keep all prompts free of readable text/logos/UI overlays.
+- If is_it_ending=false, set ending_image_prompt and ending_video_prompt to null.
+
 STORY MEMORY (BOUNDED CONTEXT)
 - You may receive "story_memory", which is a compressed recap of earlier scenes.
 - Use story_memory ONLY to preserve continuity: key facts, open threads, and named entities.

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks
@@ -11,7 +13,7 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
-from backend.media import generate_music, generate_scene_image, generate_tts
+from backend.media import generate_ending_video, generate_music, generate_scene_image, generate_tts
 from backend.prompts.narrator_director import STATIC_PROMPT
 from backend.prompts.state_canonicalizer import STATE_CANONICALIZER_SYSTEM
 from backend.prompts.story_memory_summarizer import SYSTEM_INSTRUCTION as STORY_MEMORY_SYSTEM
@@ -46,6 +48,100 @@ def _dump_model(model: BaseModel) -> dict:
 
 def _session_slug(session_id: str) -> str:
     return session_id.replace("-", "")
+
+
+def _is_development_mode() -> bool:
+    env = os.getenv("APP_ENV", "development").strip().lower()
+    return env not in {"production", "prod"}
+
+
+def _extract_debug_action(raw_action: str) -> tuple[str, bool, bool]:
+    if not _is_development_mode():
+        return raw_action, False, False
+
+    ending_token = os.getenv("ENDING_DEBUG_TOKEN", "3nD1n6N0W").strip()
+    gameover_token = os.getenv("GAMEOVER_DEBUG_TOKEN", "G4m30v3rN0W").strip()
+
+    force_ending = bool(ending_token and ending_token in raw_action)
+    force_game_over = bool(gameover_token and gameover_token in raw_action)
+    if not force_ending and not force_game_over:
+        return raw_action, False, False
+
+    cleaned_action = raw_action
+    if force_ending:
+        cleaned_action = cleaned_action.replace(ending_token, "")
+    if force_game_over:
+        cleaned_action = cleaned_action.replace(gameover_token, "")
+    cleaned_action = cleaned_action.strip()
+    if not cleaned_action:
+        cleaned_action = "I trigger the emergency ending protocol."
+    return cleaned_action, force_ending, force_game_over
+
+
+def _force_ending_output(parsed: DirectorNarratorOutput) -> None:
+    parsed.is_it_ending = True
+    parsed.is_game_over = True
+    parsed.next_scene.media_type = "video"
+    parsed.next_scene.action_options = []
+    if not parsed.next_scene.ending_image_prompt:
+        parsed.next_scene.ending_image_prompt = parsed.next_scene.media_prompt
+    if not parsed.next_scene.ending_video_prompt:
+        parsed.next_scene.ending_video_prompt = parsed.next_scene.media_prompt
+    parsed.next_scene.text_story = (
+        parsed.next_scene.text_story.rstrip()
+        + "\n\nThe simulation enters terminal state. This run is complete."
+    )
+
+
+def _force_bad_game_over_output(parsed: DirectorNarratorOutput) -> None:
+    parsed.is_it_ending = False
+    parsed.is_game_over = True
+    if parsed.next_scene.media_type == "video":
+        parsed.next_scene.media_type = "image"
+    parsed.next_scene.action_options = []
+    parsed.next_scene.ending_image_prompt = None
+    parsed.next_scene.ending_video_prompt = None
+
+
+def _ensure_video_audio_cues(prompt: str) -> str:
+    lowered = prompt.lower()
+    if any(token in lowered for token in ("audio", "sound", "sfx", "ambience", "music", "score")):
+        return prompt
+    return (
+        prompt.rstrip()
+        + "\nAudio cues: low atmospheric wind, distant structural creaks, subtle rising cinematic score, "
+        "final resonant impact at the conclusion."
+    )
+
+
+def _resolve_ending_prompts(next_scene) -> tuple[str, str]:
+    base = (
+        next_scene.ending_video_prompt
+        or next_scene.ending_image_prompt
+        or next_scene.media_prompt
+        or "Cinematic final scene with strong continuity and no text overlays."
+    ).strip()
+
+    image_prompt = (next_scene.ending_image_prompt or base).strip()
+    video_seed = (next_scene.ending_video_prompt or base).strip()
+    video_prompt = _ensure_video_audio_cues(video_seed)
+    return image_prompt, video_prompt
+
+
+def _build_ending_video_prompt(text_story: str, video_prompt: str) -> str:
+    return (
+        "Create a cinematic ending video that faithfully visualizes the final scene narrative.\n"
+        "Primary narrative source (must drive shot progression and story beats):\n"
+        f"{text_story}\n\n"
+        "Visual direction and style constraints:\n"
+        f"{video_prompt}\n\n"
+        "Requirements:\n"
+        "- Continue naturally from the provided first frame image.\n"
+        "- Keep the same characters, setting, tone, and physical consequences.\n"
+        "- Resolve the ending clearly with a final beat, not a cliffhanger.\n"
+        "- Show clear motion and escalation that feels like the ending beat.\n"
+        "- No text, letters, logos, signage, subtitles, or UI overlays.\n"
+    )
 
 
 def _build_dynamic_context(state: dict, recent_scenes: List[dict]) -> str:
@@ -281,6 +377,15 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         )
 
     state = record.state_json
+    if state.get("is_game_over"):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error_type": "GAME_ALREADY_OVER",
+                "message": "This session has ended. Reset to start a new simulation.",
+            },
+        )
+
     previous_scenes = state.get("previous_scenes", [])
     if not previous_scenes:
         return JSONResponse(
@@ -288,8 +393,10 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             content={"error_type": "INVALID_STATE", "message": "No previous scenes found."},
         )
 
+    player_action, force_ending, force_bad_game_over = _extract_debug_action(payload.action)
+
     # Update the last scene with the player's selected action
-    previous_scenes[-1]["selected_action"] = payload.action
+    previous_scenes[-1]["selected_action"] = player_action
 
     story_memory = state.get("story_memory")
     if story_memory:
@@ -304,6 +411,27 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
     state_for_context["turn_number"] = next_turn_number
 
     dynamic_context = _build_dynamic_context(state_for_context, recent_scenes)
+    if force_ending:
+        dynamic_context += (
+            "\n\nDEVELOPMENT OVERRIDE:\n"
+            "The player used the debug ending token. You must finish the story now.\n"
+            "- Set is_it_ending=true\n"
+            "- Set is_game_over=true\n"
+            "- Produce a final closing scene (no cliffhanger)\n"
+            "- Set next_scene.media_type=video\n"
+            "- Provide both next_scene.ending_image_prompt and next_scene.ending_video_prompt\n"
+            "- ending_video_prompt must include explicit audio cues\n"
+            "- Return no further action options\n"
+        )
+    elif force_bad_game_over:
+        dynamic_context += (
+            "\n\nDEVELOPMENT OVERRIDE:\n"
+            "The player used the debug game-over token. You must end the run immediately WITHOUT ending video.\n"
+            "- Set is_it_ending=false\n"
+            "- Set is_game_over=true\n"
+            "- Produce a terminal failure scene in current medium (prefer image)\n"
+            "- Return no further action options\n"
+        )
 
     client = get_genai_client()
     response = client.models.generate_content(
@@ -321,6 +449,10 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         parsed = validate_model_json(response.text, DirectorNarratorOutput)
     except StructuredOutputValidationError as exc:
         return JSONResponse(status_code=422, content=exc.to_error_payload())
+    if force_ending:
+        _force_ending_output(parsed)
+    elif force_bad_game_over:
+        _force_bad_game_over_output(parsed)
     record_token_usage(
         state,
         "director",
@@ -354,7 +486,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             failed_inventory_updates=failed_inventory,
             failed_skill_update=failed_skill,
             scene_excerpt=parsed.next_scene.text_story[:300],
-            player_action=payload.action,
+            player_action=player_action,
         )
         record_token_usage(
             state,
@@ -406,36 +538,74 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             }
         )
 
-    if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
+    scene_media_type = "video" if parsed.is_it_ending else parsed.next_scene.media_type
+    if scene_media_type == "video":
+        parsed.is_game_over = True
+        parsed.next_scene.action_options = []
+    if scene_media_type != "video" and parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
         state["current_music"] = parsed.next_scene.music_prompt
+
+    ending_image_prompt: Optional[str] = None
+    ending_video_prompt: Optional[str] = None
+    if scene_media_type == "video":
+        ending_image_prompt, ending_video_prompt = _resolve_ending_prompts(parsed.next_scene)
+        parsed.next_scene.ending_image_prompt = ending_image_prompt
+        parsed.next_scene.ending_video_prompt = ending_video_prompt
+
+    state["is_game_over"] = bool(parsed.is_game_over)
+    response_action_options = (
+        [] if parsed.is_game_over or scene_media_type == "video" else _dump_model(parsed.next_scene).get("action_options", [])
+    )
 
     # Generate media in parallel
     session_slug = _session_slug(payload.session_id)
-    media_paths: Dict[str, Optional[str]] = {"image_path": None, "tts_path": None, "music_path": None}
+    media_paths: Dict[str, Optional[str]] = {
+        "image_path": None,
+        "video_path": None,
+        "tts_path": None,
+        "music_path": None,
+    }
     try:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures: Dict[str, Any] = {}
-            if parsed.next_scene.media_type == "image":
-                futures["image_path"] = executor.submit(
-                    generate_scene_image,
-                    parsed.next_scene.media_prompt,
-                    f"{session_slug}_scene_{next_turn_number}.png",
-                )
-            futures["tts_path"] = executor.submit(
-                generate_tts,
-                parsed.next_scene.text_story,
-                f"{session_slug}_tts_{next_turn_number}.wav",
+        if scene_media_type == "video":
+            ending_frame_path = generate_scene_image(
+                ending_image_prompt or parsed.next_scene.media_prompt,
+                f"{session_slug}_ending_frame_{next_turn_number}.png",
             )
-            if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
-                futures["music_path"] = executor.submit(
-                    generate_music,
-                    parsed.next_scene.music_prompt,
-                    f"{session_slug}_music_{next_turn_number}.wav",
+            media_paths["image_path"] = str(ending_frame_path)
+            ending_prompt = _build_ending_video_prompt(
+                parsed.next_scene.text_story,
+                ending_video_prompt or parsed.next_scene.media_prompt,
+            )
+            video_path = generate_ending_video(
+                ending_prompt,
+                f"{session_slug}_ending_{next_turn_number}.mp4",
+                Path(ending_frame_path),
+            )
+            media_paths["video_path"] = str(video_path)
+        else:
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures: Dict[str, Any] = {}
+                if scene_media_type == "image":
+                    futures["image_path"] = executor.submit(
+                        generate_scene_image,
+                        parsed.next_scene.media_prompt,
+                        f"{session_slug}_scene_{next_turn_number}.png",
+                    )
+                futures["tts_path"] = executor.submit(
+                    generate_tts,
+                    parsed.next_scene.text_story,
+                    f"{session_slug}_tts_{next_turn_number}.wav",
                 )
+                if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
+                    futures["music_path"] = executor.submit(
+                        generate_music,
+                        parsed.next_scene.music_prompt,
+                        f"{session_slug}_music_{next_turn_number}.wav",
+                    )
 
-            for key, future in futures.items():
-                result = future.result()
-                media_paths[key] = str(result) if result is not None else None
+                for key, future in futures.items():
+                    result = future.result()
+                    media_paths[key] = str(result) if result is not None else None
     except Exception as exc:  # pragma: no cover - surface as API error
         return JSONResponse(
             status_code=500,
@@ -452,8 +622,9 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
             "text_story": parsed.next_scene.text_story,
             "selected_action": None,
             "media": {
-                "media_type": parsed.next_scene.media_type,
+                "media_type": scene_media_type,
                 "image_path": media_paths["image_path"],
+                "video_path": media_paths["video_path"],
                 "tts_path": media_paths["tts_path"],
                 "music_path": media_paths["music_path"],
             },
@@ -463,7 +634,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
 
     save_session(payload.session_id, state)
 
-    if next_turn_number == 13:
+    if next_turn_number == 13 and not parsed.is_game_over:
         background_tasks.add_task(_summarize_story_memory, payload.session_id)
 
     return {
@@ -471,14 +642,17 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks) -> dict:
         "turn_number": next_turn_number,
         "scene": {
             "text_story": parsed.next_scene.text_story,
-            "action_options": _dump_model(parsed.next_scene).get("action_options", []),
-            "media_type": parsed.next_scene.media_type,
+            "action_options": response_action_options,
+            "media_type": scene_media_type,
             "media_prompt": parsed.next_scene.media_prompt,
             "image_path": media_paths["image_path"],
+            "video_path": media_paths["video_path"],
             "tts_path": media_paths["tts_path"],
             "music_action": parsed.next_scene.music_action,
             "music_prompt": parsed.next_scene.music_prompt,
             "music_path": media_paths["music_path"],
+            "ending_image_prompt": parsed.next_scene.ending_image_prompt,
+            "ending_video_prompt": parsed.next_scene.ending_video_prompt,
         },
         "hints": _dump_model(parsed.hints),
         "narrative_alignment": _dump_model(parsed.narrative_alignment),

@@ -174,6 +174,9 @@ def _poll_until_done(client: genai.Client, operation, sleep_seconds: int = 10):
     while not operation.done:
         time.sleep(sleep_seconds)
         operation = client.operations.get(operation)
+    op_error = getattr(operation, "error", None)
+    if op_error:
+        raise RuntimeError(f"Video generation operation failed: {op_error}")
     return operation
 
 
@@ -182,25 +185,46 @@ def generate_ending_video(
     filename: str = "ending.mp4",
     first_frame_path: Optional[Path] = None,
 ) -> Path:
-    client = get_genai_client()
+    # Veo preview features can vary by API version; prefer v1alpha with fallback.
+    client = get_genai_client(api_version="v1alpha")
 
     if first_frame_path is not None:
-        first_frame = types.Image.from_file(str(first_frame_path))
+        resolved_first = first_frame_path
+        if not resolved_first.is_absolute():
+            resolved_first = ROOT_DIR / resolved_first
+        if resolved_first.exists():
+            first_frame = types.Image.from_file(location=str(resolved_first))
+        else:
+            first_frame = _generate_first_frame(prompt)
     else:
         first_frame = _generate_first_frame(prompt)
 
-    operation = client.models.generate_videos(
-        model="veo-3.1-fast-generate-preview",
-        prompt=prompt,
-        image=first_frame,
-    )
+    operation_kwargs = {
+        "model": "veo-3.1-fast-generate-preview",
+        "prompt": prompt,
+        "image": first_frame,
+    }
 
-    operation = _poll_until_done(client, operation)
+    def _start_generation(active_client: genai.Client):
+        return active_client.models.generate_videos(**operation_kwargs)
+
+    try:
+        operation = _start_generation(client)
+        operation = _poll_until_done(client, operation)
+    except Exception:
+        # Retry once on default API version in case account/project is configured there.
+        client = get_genai_client()
+        operation = _start_generation(client)
+        operation = _poll_until_done(client, operation)
 
     _ensure_dir(VIDEO_DIR)
     out_path = VIDEO_DIR / filename
 
-    video_obj = operation.response.generated_videos[0]
+    response = getattr(operation, "response", None)
+    generated = getattr(response, "generated_videos", None) if response else None
+    if not generated:
+        raise RuntimeError("Video generation returned no generated_videos in operation response.")
+    video_obj = generated[0]
     client.files.download(file=video_obj.video)
     video_obj.video.save(str(out_path))
 

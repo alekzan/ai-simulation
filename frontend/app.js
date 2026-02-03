@@ -19,6 +19,7 @@ const sceneImageFallback = el("scene-image-fallback");
 const actionList = el("action-list");
 const customAction = el("custom-action");
 const submitCustom = el("submit-custom");
+const startNewSimulation = el("start-new-simulation");
 const skillsList = el("skills-list");
 const inventoryList = el("inventory-list");
 const loadingText = el("loading-text");
@@ -45,6 +46,7 @@ const metricsBreakdown = el("metrics-breakdown");
 const state = {
   sessionId: null,
   turnNumber: 0,
+  gameOver: false,
   gameLength: "SHORT",
   ttsMuted: false,
   musicMuted: false,
@@ -59,6 +61,8 @@ const state = {
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
 };
+const CUSTOM_ACTION_DEFAULT_PLACEHOLDER =
+  "I steady my breath and move toward the sound...";
 
 state.musicAudio.loop = true;
 const defaultTurnLoadingHints = [
@@ -256,6 +260,11 @@ function setInventory(inventory, inventoryDelta) {
 
 function renderActions(actions) {
   actionList.innerHTML = "";
+  if (!actions.length) {
+    actionList.innerHTML =
+      '<div class="empty-list">Simulation complete. No further actions available.</div>';
+    return;
+  }
   actions.forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "action-button";
@@ -263,6 +272,42 @@ function renderActions(actions) {
     button.addEventListener("click", () => submitAction(option.action));
     actionList.appendChild(button);
   });
+}
+
+function setActionInputState(disabled) {
+  customAction.disabled = disabled;
+  submitCustom.disabled = disabled;
+  startNewSimulation.classList.toggle("hidden", !state.gameOver);
+  customAction.placeholder = disabled
+    ? "Simulation has ended. Reset session to start a new run."
+    : CUSTOM_ACTION_DEFAULT_PLACEHOLDER;
+}
+
+function resetToTitleScreen() {
+  resetModal.classList.add("hidden");
+  metricsModal.classList.add("hidden");
+  state.sessionId = null;
+  state.turnNumber = 0;
+  state.gameOver = false;
+  state.currentMusicPath = null;
+  state.currentTtsPath = null;
+  state.transitionHints = [];
+  state.inventory = [];
+  state.inventoryDelta = [];
+  state.skills = [];
+  state.skillDelta = [];
+  state.simulationMetrics = null;
+  setInventory([], []);
+  setSkills([], []);
+  renderSimulationMetrics(null);
+  sessionIdEl.textContent = "--";
+  state.ttsAudio.pause();
+  state.ttsAudio.removeAttribute("src");
+  state.musicAudio.pause();
+  state.musicAudio.removeAttribute("src");
+  loadSettings();
+  setActionInputState(false);
+  showScreen(titleScreen);
 }
 
 function renderTitlePlaceholders() {
@@ -418,21 +463,40 @@ async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
   }
 }
 
+async function playEndingVideo() {
+  if (!sceneVideo.src) return;
+  try {
+    sceneVideo.currentTime = 0;
+    await sceneVideo.play();
+  } catch (_err) {
+    showToast("Tap the video panel to start ending playback.");
+  }
+}
+
 function setMediaDisplay(mediaType) {
   const isVideo = mediaType === "video";
   sceneVideo.classList.toggle("hidden", !isVideo);
   sceneImage.classList.toggle("hidden", isVideo);
+  if (isVideo) {
+    sceneVideo.playsInline = true;
+  } else {
+    sceneVideo.pause();
+    sceneVideo.removeAttribute("src");
+  }
 }
 
 function renderScene(scene) {
   updateTopStatus();
   state.currentTtsPath = scene.tts_path || null;
   renderSceneText(scene.text_story || "");
-  renderActions(scene.action_options || []);
+  const actionOptions = scene.action_options || [];
+  renderActions(actionOptions);
+  setActionInputState(state.gameOver || actionOptions.length === 0);
   setMediaDisplay(scene.media_type || "image");
 
   if (scene.media_type === "video") {
-    const source = normalizePath(scene.image_path);
+    const source = normalizePath(scene.video_path || scene.image_path);
+    sceneImageFallback.classList.add("hidden");
     if (source) {
       sceneVideo.src = source;
     }
@@ -469,6 +533,7 @@ async function startGame(storyText) {
 
     state.sessionId = data.session_id;
     state.turnNumber = 1;
+    state.gameOver = !!data.is_game_over;
     state.currentMusicPath = null;
     state.transitionHints = extractHintTexts(data.initial_script?.hints);
     sessionIdEl.textContent = state.sessionId.slice(0, 8);
@@ -499,7 +564,7 @@ async function startGame(storyText) {
 }
 
 async function submitAction(actionText) {
-  if (!state.sessionId || !actionText) return;
+  if (!state.sessionId || !actionText || state.gameOver) return;
 
   state.ttsAudio.pause();
   state.ttsAudio.currentTime = 0;
@@ -514,8 +579,21 @@ async function submitAction(actionText) {
       session_id: state.sessionId,
       action: actionText,
     });
+    const isEndingVideo = data.scene?.media_type === "video";
+    if (isEndingVideo) {
+      state.ttsAudio.pause();
+      state.ttsAudio.currentTime = 0;
+      state.musicAudio.pause();
+      state.currentMusicPath = null;
+      state.ttsMuted = true;
+      state.musicMuted = true;
+      state.musicAudio.muted = true;
+      setToggleState(ttsToggle, "TTS", true);
+      setToggleState(musicToggle, "Music", true);
+    }
 
     state.turnNumber = data.turn_number || state.turnNumber + 1;
+    state.gameOver = !!data.is_game_over;
     updateTopStatus();
     setSimulationMetrics(data.simulation_metrics);
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
@@ -525,14 +603,21 @@ async function submitAction(actionText) {
     state.transitionHints = extractHintTexts(data.hints);
 
     showScreen(sceneScreen);
+    if (state.gameOver) {
+      showToast("Simulation ended. Reset session to run a new scenario.");
+    }
 
-    await playSceneAudio(
-      data.scene?.tts_path,
-      data.scene?.music_action === "CHANGE"
-        ? data.scene?.music_path
-        : state.currentMusicPath,
-      data.scene?.music_action === "CHANGE"
-    );
+    if (isEndingVideo) {
+      await playEndingVideo();
+    } else {
+      await playSceneAudio(
+        data.scene?.tts_path,
+        data.scene?.music_action === "CHANGE"
+          ? data.scene?.music_path
+          : state.currentMusicPath,
+        data.scene?.music_action === "CHANGE"
+      );
+    }
   } catch (err) {
     showToast(err.message || "Failed to process turn.");
     showScreen(sceneScreen);
@@ -618,31 +703,16 @@ cancelReset.addEventListener("click", () => {
 });
 
 confirmReset.addEventListener("click", () => {
-  resetModal.classList.add("hidden");
-  metricsModal.classList.add("hidden");
-  state.sessionId = null;
-  state.turnNumber = 0;
-  state.currentMusicPath = null;
-  state.currentTtsPath = null;
-  state.transitionHints = [];
-  state.inventory = [];
-  state.inventoryDelta = [];
-  state.skills = [];
-  state.skillDelta = [];
-  state.simulationMetrics = null;
-  setInventory([], []);
-  setSkills([], []);
-  renderSimulationMetrics(null);
-  sessionIdEl.textContent = "--";
-  state.ttsAudio.pause();
-  state.ttsAudio.removeAttribute("src");
-  state.musicAudio.pause();
-  state.musicAudio.removeAttribute("src");
-  showScreen(titleScreen);
+  resetToTitleScreen();
+});
+
+startNewSimulation.addEventListener("click", () => {
+  resetToTitleScreen();
 });
 
 loadSettings();
 setInventory([], []);
 setSkills([], []);
 renderSimulationMetrics(null);
+setActionInputState(false);
 loadTitleIdeas();
