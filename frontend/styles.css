@@ -397,7 +397,7 @@ textarea:focus {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -448,7 +448,7 @@ textarea:focus {
 
 .card-media {
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 9 / 16;
   object-fit: cover;
   display: block;
   background: rgba(12, 22, 32, 0.9);
@@ -932,6 +932,10 @@ textarea:focus {
 
   .top-controls {
     justify-content: flex-start;
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

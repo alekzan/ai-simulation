@@ -32,9 +32,9 @@ class TitleIdea(BaseModel):
     )
     cover_image_prompt: str = Field(
         description=(
-            "Prompt for a premium game cover image. Must specify style, mood, lighting, "
-            "composition, key elements. No text, no logos, no watermarks. "
-            "No readable typography, letters, numbers, signage, or UI."
+            "Prompt for a premium cinematic poster image. Must specify style, mood, lighting, "
+            "composition, key elements. Must include only the title text as readable typography. "
+            "No logos, no watermarks, no taglines, no credits, no extra text, no UI."
         )
     )
 

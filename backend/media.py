@@ -29,7 +29,12 @@ def _relative_path(path: Path) -> Path:
         return path
 
 
-def generate_scene_image(prompt: str, filename: str = "scene.png", api_key: Optional[str] = None) -> Path:
+def generate_scene_image(
+    prompt: str,
+    filename: str = "scene.png",
+    api_key: Optional[str] = None,
+    aspect_ratio: str = "16:9",
+) -> Path:
     client = get_genai_client(api_key=api_key)
 
     chat = client.chats.create(
@@ -37,7 +42,7 @@ def generate_scene_image(prompt: str, filename: str = "scene.png", api_key: Opti
         config=types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
             image_config=types.ImageConfig(
-                aspect_ratio="16:9",
+                aspect_ratio=aspect_ratio,
             ),
         ),
     )

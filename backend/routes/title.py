@@ -157,6 +157,7 @@ def title_options_with_covers(request: Request) -> dict:
                     idea.cover_image_prompt,
                     f"title_{batch_id}_{idea.id}.png",
                     api_key,
+                    "9:16",
                 )
                 for idea in parsed.ideas
             }

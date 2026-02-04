@@ -14,7 +14,8 @@ RULES
 - Do not include lists, bullets, or commentary.
 
 COVER IMAGE PROMPT RULES
-- For each idea, provide a cover_image_prompt that looks like a premium game cover.
+- For each idea, provide a cover_image_prompt that looks like a premium cinematic movie poster.
 - The prompt must specify: style, mood, lighting, composition, and key elements.
-- No text in the image. No logos. No watermarks. No readable typography.
+- The image must include readable poster text with ONLY the game title (no extra words).
+- No logos. No watermarks. No taglines. No credits. No additional typography beyond the title.
 """.strip()
