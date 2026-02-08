@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -17,6 +18,16 @@ IMAGE_DIR = MEDIA_DIR / "images"
 AUDIO_DIR = MEDIA_DIR / "audio"
 VIDEO_DIR = MEDIA_DIR / "video"
 
+IMAGE_RETENTION_SECONDS = int(os.getenv("MEDIA_IMAGE_RETENTION_SECONDS", "600"))
+AUDIO_RETENTION_SECONDS = int(os.getenv("MEDIA_AUDIO_RETENTION_SECONDS", "900"))
+VIDEO_RETENTION_SECONDS = int(os.getenv("MEDIA_VIDEO_RETENTION_SECONDS", "900"))
+
+PROTECTED_IMAGE_FILES = {
+    "title_acff3de5_A.png",
+    "title_acff3de5_B.png",
+    "title_acff3de5_C.png",
+}
+
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -27,6 +38,63 @@ def _relative_path(path: Path) -> Path:
         return path.relative_to(ROOT_DIR)
     except ValueError:
         return path
+
+
+def _resolve_media_path(path: str | Path) -> Optional[Path]:
+    if not path:
+        return None
+    resolved = Path(path)
+    if not resolved.is_absolute():
+        resolved = ROOT_DIR / resolved
+    try:
+        resolved = resolved.resolve()
+    except FileNotFoundError:
+        resolved = resolved.absolute()
+    try:
+        resolved.relative_to(MEDIA_DIR)
+    except ValueError:
+        return None
+    return resolved
+
+
+def delete_media_files(paths: list[str | Path]) -> None:
+    for path in paths:
+        resolved = _resolve_media_path(path)
+        if resolved is None:
+            continue
+        if resolved.name in PROTECTED_IMAGE_FILES:
+            continue
+        try:
+            resolved.unlink(missing_ok=True)
+        except FileNotFoundError:
+            continue
+
+
+def cleanup_expired_media(now: Optional[float] = None) -> None:
+    timestamp = now or time.time()
+    dir_specs = [
+        (IMAGE_DIR, IMAGE_RETENTION_SECONDS, PROTECTED_IMAGE_FILES),
+        (AUDIO_DIR, AUDIO_RETENTION_SECONDS, set()),
+        (VIDEO_DIR, VIDEO_RETENTION_SECONDS, set()),
+    ]
+
+    for directory, ttl_seconds, protected in dir_specs:
+        if ttl_seconds <= 0 or not directory.exists():
+            continue
+        for candidate in directory.iterdir():
+            if not candidate.is_file():
+                continue
+            if candidate.name in protected:
+                continue
+            try:
+                age_seconds = timestamp - candidate.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age_seconds > ttl_seconds:
+                try:
+                    candidate.unlink(missing_ok=True)
+                except FileNotFoundError:
+                    continue
 
 
 def generate_scene_image(

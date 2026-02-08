@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import create_session, save_session
-from backend.media import generate_music, generate_scene_image, generate_tts
+from backend.media import cleanup_expired_media, generate_music, generate_scene_image, generate_tts
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
 from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import InitialScriptOutput
@@ -40,6 +40,7 @@ def init_game(payload: InitRequest, request: Request) -> dict:
     api_key = get_request_api_key(request)
     if not api_key:
         return missing_api_key_response()
+    cleanup_expired_media()
 
     target_turns_hint = {
         "SHORT": 10,

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from google.genai import types
 
 from backend.clients import get_genai_client, get_thinking_config
-from backend.media import generate_scene_image
+from backend.media import cleanup_expired_media, generate_scene_image
 from backend.prompts.title_screen_selector import PROMPT
 from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import TitleScreenSelectorOutput
@@ -101,6 +101,7 @@ def title_options(request: Request) -> dict:
     api_key = get_request_api_key(request)
     if not api_key:
         return missing_api_key_response()
+    cleanup_expired_media()
 
     if _use_dev_fixed_titles():
         return {
@@ -133,6 +134,7 @@ def title_options_with_covers(request: Request) -> dict:
     api_key = get_request_api_key(request)
     if not api_key:
         return missing_api_key_response()
+    cleanup_expired_media()
 
     if _use_dev_fixed_titles():
         return {"ideas": _dev_fixed_ideas()}

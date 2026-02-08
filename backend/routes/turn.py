@@ -13,7 +13,14 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
-from backend.media import generate_ending_video, generate_music, generate_scene_image, generate_tts
+from backend.media import (
+    cleanup_expired_media,
+    delete_media_files,
+    generate_ending_video,
+    generate_music,
+    generate_scene_image,
+    generate_tts,
+)
 from backend.prompts.narrator_director import STATIC_PROMPT
 from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.prompts.state_canonicalizer import STATE_CANONICALIZER_SYSTEM
@@ -49,6 +56,34 @@ def _dump_model(model: BaseModel) -> dict:
 
 def _session_slug(session_id: str) -> str:
     return session_id.replace("-", "")
+
+
+def _last_music_path(previous_scenes: list[dict]) -> Optional[str]:
+    for scene in reversed(previous_scenes):
+        media = scene.get("media", {})
+        path = media.get("music_path")
+        if path:
+            return path
+    return None
+
+
+def _prune_old_scene_media(
+    previous_scenes: list[dict],
+    keep_last: int,
+    keep_music_path: Optional[str],
+) -> None:
+    if keep_last <= 0 or len(previous_scenes) <= keep_last:
+        return
+    for scene in previous_scenes[:-keep_last]:
+        media = scene.get("media", {})
+        for key in ("image_path", "tts_path", "video_path", "music_path"):
+            path = media.get(key)
+            if not path:
+                continue
+            if key == "music_path" and keep_music_path and path == keep_music_path:
+                continue
+            delete_media_files([path])
+            media[key] = None
 
 
 def _is_development_mode() -> bool:
@@ -377,6 +412,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
     api_key = get_request_api_key(request)
     if not api_key:
         return missing_api_key_response()
+    cleanup_expired_media()
 
     record = get_session(payload.session_id)
     if record is None:
@@ -401,6 +437,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
             status_code=400,
             content={"error_type": "INVALID_STATE", "message": "No previous scenes found."},
         )
+    current_music_path = _last_music_path(previous_scenes)
 
     player_action, force_ending, force_bad_game_over = _extract_debug_action(payload.action)
 
@@ -658,6 +695,12 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
             },
         }
     )
+    keep_music_path = (
+        media_paths["music_path"]
+        if parsed.next_scene.music_action == "CHANGE" and media_paths["music_path"]
+        else current_music_path
+    )
+    _prune_old_scene_media(previous_scenes, keep_last=1, keep_music_path=keep_music_path)
     state["previous_scenes"] = previous_scenes
 
     save_session(payload.session_id, state)
