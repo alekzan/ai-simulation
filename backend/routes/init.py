@@ -43,6 +43,10 @@ def _dump_model(model: BaseModel) -> dict:
     return model.dict()
 
 
+def _session_slug(session_id: str) -> str:
+    return session_id.replace("-", "")
+
+
 @router.post("/init")
 def init_game(payload: InitRequest, request: Request) -> dict:
     api_key = get_request_api_key(request)
@@ -127,7 +131,8 @@ def init_game(payload: InitRequest, request: Request) -> dict:
     )
 
     session_id = create_session(session_state)
-    # Generate initial media in parallel using ephemeral storage.
+    session_slug = _session_slug(session_id)
+    # Generate initial media in parallel.
     media_paths: Dict[str, Optional[str]] = {
         "image_path": None,
         "video_path": None,
