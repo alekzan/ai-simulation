@@ -19,6 +19,7 @@ const turnCounter = el("turn-counter");
 const sceneText = el("scene-text");
 const sceneImage = el("scene-image");
 const sceneVideo = el("scene-video");
+const sceneImageOverlay = el("scene-image-overlay");
 const sceneImageFallback = el("scene-image-fallback");
 const actionList = el("action-list");
 const customAction = el("custom-action");
@@ -71,6 +72,8 @@ const CUSTOM_ACTION_DEFAULT_PLACEHOLDER =
   "I steady my breath and move toward the sound...";
 
 state.musicAudio.loop = true;
+state.ttsAudio.preload = "auto";
+state.musicAudio.preload = "auto";
 const defaultTurnLoadingHints = [
   "Reading your intent and projected risk.",
   "Rebalancing the simulation around your move.",
@@ -81,6 +84,31 @@ function normalizePath(path) {
   if (!path) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+async function warmImage(path, timeoutMs = 12000) {
+  const source = normalizePath(path);
+  if (!source) return null;
+  await new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    const timer = window.setTimeout(finish, timeoutMs);
+    img.onload = () => {
+      window.clearTimeout(timer);
+      finish();
+    };
+    img.onerror = () => {
+      window.clearTimeout(timer);
+      finish();
+    };
+    img.src = source;
+  });
+  return source;
 }
 
 function nextFlowToken() {
@@ -371,13 +399,36 @@ function renderTitleCards(ideas) {
     const card = document.createElement("article");
     card.className = "card";
 
+    const mediaWrap = document.createElement("div");
+    mediaWrap.className = "card-media-wrap";
     const image = document.createElement("img");
-    image.className = "card-media";
+    image.className = "card-media is-pending";
     image.alt = `${idea.title} cover`;
+    image.decoding = "async";
+
+    const mediaOverlay = document.createElement("div");
+    mediaOverlay.className = "card-media-overlay";
+    mediaOverlay.textContent = "Loading cover...";
     const coverPath = normalizePath(idea.cover_image_path);
     if (coverPath) {
       image.src = coverPath;
     }
+    image.addEventListener(
+      "load",
+      () => {
+        image.classList.remove("is-pending");
+        mediaOverlay.classList.add("hidden");
+      },
+      { once: true }
+    );
+    image.addEventListener(
+      "error",
+      () => {
+        mediaOverlay.textContent = "Cover unavailable";
+      },
+      { once: true }
+    );
+    mediaWrap.append(image, mediaOverlay);
 
     const body = document.createElement("div");
     body.className = "card-body";
@@ -398,7 +449,7 @@ function renderTitleCards(ideas) {
     });
 
     body.append(title, hook, startButton);
-    card.append(image, body);
+    card.append(mediaWrap, body);
     titleCards.appendChild(card);
   });
 }
@@ -569,6 +620,8 @@ function renderScene(scene) {
 
   if (scene.media_type === "video") {
     const source = normalizePath(scene.video_path || scene.image_path);
+    sceneImageOverlay.classList.add("hidden");
+    sceneImage.classList.remove("is-pending");
     sceneImageFallback.classList.add("hidden");
     if (source) {
       sceneVideo.src = source;
@@ -578,9 +631,28 @@ function renderScene(scene) {
 
   const imageSource = normalizePath(scene.image_path);
   if (imageSource) {
-    sceneImage.src = imageSource;
+    sceneImage.classList.add("is-pending");
+    sceneImageOverlay.classList.remove("hidden");
     sceneImageFallback.classList.add("hidden");
+    sceneImage.onload = () => {
+      sceneImage.classList.remove("is-pending");
+      sceneImageOverlay.classList.add("hidden");
+      sceneImageFallback.classList.add("hidden");
+    };
+    sceneImage.onerror = () => {
+      sceneImage.classList.remove("is-pending");
+      sceneImageOverlay.classList.add("hidden");
+      sceneImageFallback.classList.remove("hidden");
+    };
+    sceneImage.src = imageSource;
+    if (sceneImage.complete && sceneImage.naturalWidth > 0) {
+      sceneImage.classList.remove("is-pending");
+      sceneImageOverlay.classList.add("hidden");
+      sceneImageFallback.classList.add("hidden");
+    }
   } else {
+    sceneImageOverlay.classList.add("hidden");
+    sceneImage.classList.remove("is-pending");
     sceneImage.removeAttribute("src");
     sceneImageFallback.classList.remove("hidden");
   }
@@ -617,13 +689,20 @@ async function startGame(storyText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || data.initial_script?.skills || [], data.skill_delta_this_turn || []);
 
-    renderScene({
+    const initialScenePayload = {
       ...data.initial_scene,
       media_type: "image",
       image_path: data.initial_media?.image_path,
       tts_path: data.initial_media?.tts_path,
       music_path: data.initial_media?.music_path,
-    });
+    };
+
+    if (initialScenePayload.image_path) {
+      await warmImage(initialScenePayload.image_path);
+      if (flowToken !== state.flowToken) return;
+    }
+
+    renderScene(initialScenePayload);
 
     showScreen(sceneScreen);
 
@@ -678,7 +757,13 @@ async function submitAction(actionText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || [], data.skill_delta_this_turn || []);
 
-    renderScene(data.scene || {});
+    const nextScene = data.scene || {};
+    if (nextScene.media_type === "image" && nextScene.image_path) {
+      await warmImage(nextScene.image_path);
+      if (flowToken !== state.flowToken) return;
+    }
+
+    renderScene(nextScene);
     state.transitionHints = extractHintTexts(data.hints);
 
     showScreen(sceneScreen);

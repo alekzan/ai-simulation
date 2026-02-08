@@ -158,6 +158,39 @@ def _wav_bytes(pcm: bytes, channels: int = 1, rate: int = 24000, sample_width: i
     return buffer.getvalue()
 
 
+def _downsample_music_pcm(
+    pcm: bytes,
+    input_rate: int = 48000,
+    input_channels: int = 2,
+    output_rate: int = 24000,
+    output_channels: int = 1,
+    sample_width: int = 2,
+) -> tuple[bytes, int, int]:
+    import audioop
+
+    converted = pcm
+    channels = input_channels
+
+    if input_channels == 2 and output_channels == 1:
+        converted = audioop.tomono(converted, sample_width, 0.5, 0.5)
+        channels = 1
+    elif input_channels == 1 and output_channels == 2:
+        converted = audioop.tostereo(converted, sample_width, 1, 1)
+        channels = 2
+
+    if input_rate != output_rate:
+        converted, _ = audioop.ratecv(
+            converted,
+            sample_width,
+            channels,
+            input_rate,
+            output_rate,
+            None,
+        )
+
+    return converted, channels, output_rate
+
+
 def generate_scene_image_bytes(
     prompt: str,
     api_key: Optional[str] = None,
@@ -351,7 +384,21 @@ def generate_music_bytes(
     else:
         pcm = asyncio.run(_generate_music_pcm_async(prompt, duration_seconds, api_key))
 
-    return _wav_bytes(pcm, channels=2, rate=48000, sample_width=2)
+    # Reduce transport size for smoother browser playback on production links.
+    optimized_pcm, optimized_channels, optimized_rate = _downsample_music_pcm(
+        pcm,
+        input_rate=48000,
+        input_channels=2,
+        output_rate=24000,
+        output_channels=1,
+        sample_width=2,
+    )
+    return _wav_bytes(
+        optimized_pcm,
+        channels=optimized_channels,
+        rate=optimized_rate,
+        sample_width=2,
+    )
 
 
 def _generate_first_frame(prompt: str, api_key: Optional[str] = None) -> types.Image:

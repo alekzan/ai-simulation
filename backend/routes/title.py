@@ -9,7 +9,7 @@ from google.genai import types
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.ephemeral_media import (
-    EPHEMERAL_IMAGE_TTL_SECONDS,
+    EPHEMERAL_TITLE_IMAGE_TTL_SECONDS,
     build_ephemeral_path,
     prune_expired_media,
     store_media,
@@ -173,7 +173,7 @@ def title_options_with_covers(request: Request) -> dict:
                 token = store_media(
                     image_bytes,
                     "image/png",
-                    EPHEMERAL_IMAGE_TTL_SECONDS,
+                    EPHEMERAL_TITLE_IMAGE_TTL_SECONDS,
                 )
                 cover_paths[idea_id] = build_ephemeral_path(token)
     except Exception as exc:
