@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -9,12 +10,9 @@ from google.genai import types
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.ephemeral_media import (
-    EPHEMERAL_TITLE_IMAGE_TTL_SECONDS,
-    build_ephemeral_path,
     prune_expired_media,
-    store_media,
 )
-from backend.media import cleanup_expired_media, generate_scene_image_bytes
+from backend.media import cleanup_expired_media, generate_scene_image_file
 from backend.prompts.title_screen_selector import PROMPT
 from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import TitleScreenSelectorOutput
@@ -156,26 +154,23 @@ def title_options_with_covers(request: Request) -> dict:
             content={"error_type": "MODEL_CALL_FAILED", "message": str(exc)},
         )
 
+    batch_id = uuid4().hex[:8]
     cover_paths: dict[str, str | None] = {idea.id: None for idea in parsed.ideas}
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {
                 idea.id: executor.submit(
-                    generate_scene_image_bytes,
+                    generate_scene_image_file,
                     idea.cover_image_prompt,
+                    f"title_{batch_id}_{idea.id}",
                     api_key,
                     "9:16",
                 )
                 for idea in parsed.ideas
             }
             for idea_id, future in futures.items():
-                image_bytes, image_mime = future.result()
-                token = store_media(
-                    image_bytes,
-                    image_mime,
-                    EPHEMERAL_TITLE_IMAGE_TTL_SECONDS,
-                )
-                cover_paths[idea_id] = build_ephemeral_path(token)
+                result = future.result()
+                cover_paths[idea_id] = str(result) if result is not None else None
     except Exception as exc:
         return JSONResponse(
             status_code=500,

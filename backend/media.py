@@ -21,7 +21,7 @@ IMAGE_DIR = MEDIA_DIR / "images"
 AUDIO_DIR = MEDIA_DIR / "audio"
 VIDEO_DIR = MEDIA_DIR / "video"
 
-IMAGE_RETENTION_SECONDS = int(os.getenv("MEDIA_IMAGE_RETENTION_SECONDS", "600"))
+IMAGE_RETENTION_SECONDS = int(os.getenv("MEDIA_IMAGE_RETENTION_SECONDS", "0"))
 AUDIO_RETENTION_SECONDS = int(os.getenv("MEDIA_AUDIO_RETENTION_SECONDS", "900"))
 VIDEO_RETENTION_SECONDS = int(os.getenv("MEDIA_VIDEO_RETENTION_SECONDS", "900"))
 
@@ -264,6 +264,33 @@ def generate_scene_image_bytes(
             tmp_path.unlink(missing_ok=True)
 
     raise RuntimeError("No image found in response.parts")
+
+
+def _image_extension_for_mime(mime_type: str) -> str:
+    mapping = {
+        "image/webp": "webp",
+        "image/jpeg": "jpg",
+        "image/png": "png",
+    }
+    return mapping.get(mime_type, "png")
+
+
+def generate_scene_image_file(
+    prompt: str,
+    filename_base: str,
+    api_key: Optional[str] = None,
+    aspect_ratio: str = "16:9",
+) -> Path:
+    image_bytes, image_mime = generate_scene_image_bytes(
+        prompt=prompt,
+        api_key=api_key,
+        aspect_ratio=aspect_ratio,
+    )
+    extension = _image_extension_for_mime(image_mime)
+    _ensure_dir(IMAGE_DIR)
+    out_path = IMAGE_DIR / f"{filename_base}.{extension}"
+    out_path.write_bytes(image_bytes)
+    return _relative_path(out_path)
 
 
 def generate_tts(text: str, filename: str = "narrator.wav", api_key: Optional[str] = None) -> Path:

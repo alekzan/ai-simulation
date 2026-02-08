@@ -11,7 +11,6 @@ from pydantic import BaseModel
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import create_session, save_session
 from backend.ephemeral_media import (
-    EPHEMERAL_IMAGE_TTL_SECONDS,
     EPHEMERAL_MUSIC_TTL_SECONDS,
     EPHEMERAL_TTS_TTL_SECONDS,
     build_ephemeral_path,
@@ -21,7 +20,7 @@ from backend.ephemeral_media import (
 from backend.media import (
     cleanup_expired_media,
     generate_music_bytes,
-    generate_scene_image_bytes,
+    generate_scene_image_file,
     generate_tts_bytes,
 )
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
@@ -139,8 +138,9 @@ def init_game(payload: InitRequest, request: Request) -> dict:
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures: Dict[str, Any] = {}
             futures["image_path"] = executor.submit(
-                generate_scene_image_bytes,
+                generate_scene_image_file,
                 initial_scene.image_prompt,
+                f"{session_slug}_scene_1",
                 api_key,
             )
             futures["tts_path"] = executor.submit(
@@ -160,9 +160,7 @@ def init_game(payload: InitRequest, request: Request) -> dict:
                     media_paths[key] = None
                     continue
                 if key == "image_path":
-                    image_bytes, image_mime = result
-                    token = store_media(image_bytes, image_mime, EPHEMERAL_IMAGE_TTL_SECONDS)
-                    media_paths[key] = build_ephemeral_path(token)
+                    media_paths[key] = str(result)
                 elif key == "tts_path":
                     token = store_media(result, "audio/wav", EPHEMERAL_TTS_TTL_SECONDS)
                     media_paths[key] = build_ephemeral_path(token)

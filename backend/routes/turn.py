@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
 from backend.ephemeral_media import (
-    EPHEMERAL_IMAGE_TTL_SECONDS,
     EPHEMERAL_MUSIC_TTL_SECONDS,
     EPHEMERAL_TTS_TTL_SECONDS,
     build_ephemeral_path,
@@ -27,7 +26,7 @@ from backend.media import (
     generate_ending_video,
     generate_music_bytes,
     generate_scene_image,
-    generate_scene_image_bytes,
+    generate_scene_image_file,
     generate_tts_bytes,
 )
 from backend.prompts.narrator_director import STATIC_PROMPT
@@ -85,7 +84,7 @@ def _prune_old_scene_media(
         return
     for scene in previous_scenes[:-keep_last]:
         media = scene.get("media", {})
-        for key in ("image_path", "tts_path", "video_path", "music_path"):
+        for key in ("tts_path", "video_path", "music_path"):
             path = media.get(key)
             if not path:
                 continue
@@ -654,12 +653,14 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
             delete_media_files([ending_frame_path])
             media_paths["video_path"] = str(video_path)
         else:
+            session_slug = _session_slug(payload.session_id)
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures: Dict[str, Any] = {}
                 if scene_media_type == "image":
                     futures["image_path"] = executor.submit(
-                        generate_scene_image_bytes,
+                        generate_scene_image_file,
                         parsed.next_scene.media_prompt,
+                        f"{session_slug}_scene_{next_turn_number}",
                         api_key,
                     )
                 futures["tts_path"] = executor.submit(
@@ -681,9 +682,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
                         media_paths[key] = None
                         continue
                     if key == "image_path":
-                        image_bytes, image_mime = result
-                        token = store_media(image_bytes, image_mime, EPHEMERAL_IMAGE_TTL_SECONDS)
-                        media_paths[key] = build_ephemeral_path(token)
+                        media_paths[key] = str(result)
                     elif key == "tts_path":
                         token = store_media(result, "audio/wav", EPHEMERAL_TTS_TTL_SECONDS)
                         media_paths[key] = build_ephemeral_path(token)
