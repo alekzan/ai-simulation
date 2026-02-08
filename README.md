@@ -2,201 +2,191 @@
 
 An autonomous, multimodal narrative simulation powered by **Gemini 3**.
 
-This project is **not a chatbot** and not a prompt wrapper.  
-It is a stateful simulation engine where Gemini 3 acts as a **Narrator Director**, evolving a world over time with rules, consequences, memory, and multimodal outputs.
+This project is **not** a chatbot and not a prompt wrapper. It is a stateful simulation engine where Gemini acts as a **Narrator Director**, evolving a world over time with rules, consequences, memory, and multimodal outputs.
 
----
+## What This Is
 
-## 🚀 What is this?
+AI-Driven Simulation Engine is an interactive first-person simulation where:
 
-AI-Driven Simulation Engine is an interactive, first-person simulation where:
-
-- The user chooses **actions**, not chat prompts
-- Gemini 3 **reasons about consequences**
-- The world evolves consistently over many turns
+- The player chooses **actions**, not chat prompts
+- Gemini reasons about **consequences**, not just style
+- The world evolves with continuity across many turns
 - The simulation can run in **SHORT**, **LONG**, or **INFINITE** mode
 
-The system is designed to feel cinematic, but behave like a **real product**: deterministic backend, strict schemas, persistent state, and low-latency multimodal generation.
+The goal is cinematic immersion with product-level rigor: deterministic backend behavior, strict schema validation, persistent state, and low-latency multimodal generation.
 
----
+## Quick Start (Local)
 
-## 🧠 Why Gemini 3?
+1. Create and activate a virtual environment.
 
-Gemini 3 is uniquely suited for this project because it can:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-- Perform **long-horizon reasoning**
-- Return **structured JSON** reliably
-- Orchestrate **multimodal outputs** (text, image, audio, video)
-- Maintain continuity across long-running sessions
+2. Install dependencies.
 
-This project intentionally avoids:
-- Prompt-only wrappers
-- Basic RAG
-- Generic chat interfaces
+```bash
+pip install -r requirements.txt
+```
 
----
+3. Start the server.
 
-## ✨ Key Features
+```bash
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-### 🎭 Narrative Simulation (not chat)
-- Player selects first-person actions
-- Gemini acts as a **Narrator Director**, not a conversational agent
-- Implausible actions are punished, not ignored
-
-### 🧩 Structured Reasoning
-- Every model response is validated against **Pydantic schemas**
-- Backend applies all state updates deterministically
-- Inventory, skills, music, and scenes are canonicalized and persisted
-
-### 🧠 Long-Running Autonomous Agent (Marathon-style)
-- After enough turns, earlier scenes are summarized into **story memory**
-- From that point on, Gemini reasons using:
-  - a compact memory of the past
-  - only the most recent scenes
-- Enables **infinite simulations** without token explosion
-
-### 🎨 Full Multimodality
-Per scene, the system can generate:
-- Narrative text
-- Scene image
-- Text-to-speech narration
-- Background music
-- Final ending video
-
-All media is generated **in parallel** to minimize perceived latency.
-
-### 💾 Persistent State
-- SQLite is the single source of truth per session
-- Full state is saved every turn:
-  - scenes
-  - skills
-  - inventory
-  - music
-  - memory
-  - media paths
-  - token usage (dev stats)
-
----
-
-## 🔁 How the Simulation Loop Works
-
-1. **Title Selection**
-   - Gemini generates multiple story concepts with titles and cover images
-
-2. **Initialization**
-   - One-time call builds:
-     - dramatic concept
-     - internal plot spine
-     - anchor events
-     - possible endings
-     - initial scene
-     - base skills
-   - Initial media (image, TTS, music) is generated in parallel
-
-3. **Per Turn**
-   - User selects an action
-   - Gemini returns structured JSON:
-     - next scene
-     - action options
-     - skill delta (max 1)
-     - inventory changes
-     - narrative alignment
-     - ending flags
-   - Backend validates, applies, persists, and generates media
-
-4. **Long-Run Memory**
-   - After enough scenes, earlier history is summarized
-   - Future turns use bounded context plus story memory
-
----
-
-## 🧪 Technical Highlights
-
-- FastAPI backend
-- Strict schema validation for all model outputs
-- Parallel media generation using thread pools
-- Repo-relative media paths for frontend portability
-- State Canonicalizer fallback to handle AI naming drift
-- Clean separation between:
-  - AI creativity
-  - backend enforcement
-  - frontend rendering
-
----
-
-### Open in browser
+4. Open the app.
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## Demo Flow
+5. Enter your Gemini API key in the app’s API key screen.
 
-1. Select a story title
-2. Experience Scene 1 with image, narration, and music
-3. Choose actions and watch the world evolve
-4. Toggle narration and music (settings persist)
-5. Continue into deeper scenes or infinite mode
+Important: the backend expects a per-request key (`X-Gemini-Api-Key`). The frontend handles this automatically after you enter your key.
 
-## API Overview
+## Why Gemini
 
-### Start a simulation
+This project leans on Gemini because it can:
 
-```text
-POST /api/init
+- Perform long-horizon reasoning
+- Return reliable structured JSON
+- Orchestrate multimodal outputs (text, image, audio, video)
+- Preserve narrative continuity over longer runs
+
+The design intentionally avoids:
+
+- Prompt-only wrappers
+- Basic RAG templates
+- Generic chat UX patterns
+
+## Key Features
+
+### Narrative Simulation (Not Chat)
+
+- Player actions drive the world
+- The model behaves as a director, not a conversational assistant
+- Implausible moves generate believable consequences
+
+### Structured Reasoning
+
+- Model output is validated with Pydantic schemas
+- Backend applies state updates deterministically
+- Skills, inventory, and narrative state are canonicalized and persisted
+
+### Long-Running Story Memory
+
+- Earlier scenes can be summarized into compact memory
+- Future turns reason over recent scenes plus memory
+- Enables long sessions without unbounded context growth
+
+### Multimodal Output Per Scene
+
+- Narrative text
+- Scene image
+- TTS narration
+- Background music
+- Ending video (when story reaches a terminal arc)
+
+Media generation is orchestrated in parallel where appropriate to reduce perceived latency.
+
+### Persistent Simulation State
+
+- SQLite is the source of truth per session
+- State includes scenes, skills, inventory, memory, media paths, and usage metrics
+
+## How the Simulation Loop Works
+
+1. Title selection
+- Gemini generates multiple story options with title + cover
+
+2. Initialization (`/api/init`)
+- Builds dramatic concept, plot spine, anchor events, possible endings, and scene one
+- Generates initial media
+
+3. Per turn (`/api/turn`)
+- Player submits one action
+- Director returns structured next-scene output
+- Backend validates, applies updates, persists state, and generates media
+
+4. Long-run continuity
+- Story memory summarization keeps long sessions coherent
+
+## API Key Behavior
+
+### Frontend flow (recommended)
+
+- Enter key once in UI
+- Stored in browser local storage
+- Sent as `X-Gemini-Api-Key` on API calls
+
+### Direct API calls
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/title-options-with-covers \
+  -H 'X-Gemini-Api-Key: YOUR_KEY'
 ```
 
-Returns:
+If key is missing, backend returns `401 MISSING_API_KEY`.
 
-1. Initial scene
-2. Generated image, TTS, and music
-3. Session ID
+## Core Endpoints
 
-### Advance the simulation
+- `GET /health`
+- `POST /api/title-options-with-covers`
+- `POST /api/init`
+- `POST /api/turn`
+- `GET /api/simulation-metrics/{session_id}`
 
-```text
-POST /api/turn
+## Production Notes
+
+- Run Uvicorn behind Nginx
+- Terminate HTTPS at Nginx (Let’s Encrypt)
+- Serve `/media/` directly via Nginx for better delivery performance
+
+Minimal app process command:
+
+```bash
+uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Returns:
+## Environment Variables
 
-1. Next scene
-2. Updated world state
-3. Media paths
-4. Skills, inventory, and flags
+Most users can run without `.env`, but these are available:
 
-## Infinite Mode
+- `APP_ENV`
+- `SIM_DB_PATH`
+- `TITLE_DEV_FIXED_OPTIONS`
+- `GEMINI_THINKING_LEVEL`
+- `GEMINI_FORCE_DEV_THINKING_LEVEL`
+- `MEDIA_IMAGE_RETENTION_SECONDS`
+- `MEDIA_AUDIO_RETENTION_SECONDS`
+- `MEDIA_VIDEO_RETENTION_SECONDS`
+- `EPHEMERAL_IMAGE_FORMAT`
+- `EPHEMERAL_IMAGE_QUALITY`
+- `EPHEMERAL_IMAGE_MAX_DIM`
+- `ENDING_DEBUG_TOKEN`
+- `GAMEOVER_DEBUG_TOKEN`
 
-The simulation does not require an ending.
+## Troubleshooting
 
-If enabled, the engine:
+### 401 `MISSING_API_KEY`
 
-1. Continues generating scenes
-2. Periodically summarizes memory
-3. Maintains coherence indefinitely
+- Ensure key is set in UI or pass `X-Gemini-Api-Key` manually.
 
-This aligns with Gemini 3 Marathon Agent philosophy.
+### 500 on `/api/init` or `/api/turn`
 
-## Why Gemini 3?
+- Check backend logs for `MODEL_CALL_FAILED` or `MEDIA_GENERATION_FAILED`.
+- Verify Gemini key validity and quota.
 
-This project relies on Gemini 3 for:
+### Slow media in production
 
-1. Deep narrative reasoning
-2. Structured JSON outputs
-3. Multi step decision making
-4. Long context understanding
-5. Coordinating multimodal tools
-
-## Status
-
-1. Backend complete through Step 10
-2. Multimodal orchestration working
-3. Story memory verified in SQLite
-4. Frontend vertical slice complete
-5. Ready for judging
+- Keep `/media/` served by Nginx with cache headers.
+- Keep compressed image settings enabled.
+- Avoid over-aggressive media deletion while sessions are active.
 
 ## Final Note
 
-This project demonstrates what happens when AI is treated not as a responder, but as a director of reality.
+This project explores what happens when AI is treated not as a responder, but as a director of reality.
 
 Welcome to the simulation.
