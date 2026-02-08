@@ -65,9 +65,11 @@ const state = {
   simulationMetrics: null,
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
+  mediaObjectUrls: new Map(),
 };
 const CUSTOM_ACTION_DEFAULT_PLACEHOLDER =
   "I steady my breath and move toward the sound...";
+const MAX_MEDIA_CACHE_ITEMS = 80;
 
 state.musicAudio.loop = true;
 const defaultTurnLoadingHints = [
@@ -80,6 +82,59 @@ function normalizePath(path) {
   if (!path) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+function isEphemeralPath(path) {
+  const normalized = normalizePath(path);
+  return !!normalized && normalized.startsWith("/ephemeral/");
+}
+
+function clearMediaCache() {
+  state.mediaObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+  state.mediaObjectUrls.clear();
+}
+
+async function resolveMediaSource(path) {
+  const normalized = normalizePath(path);
+  if (!normalized) return null;
+  if (!isEphemeralPath(normalized)) return normalized;
+
+  const cached = state.mediaObjectUrls.get(normalized);
+  if (cached) return cached;
+
+  const response = await fetch(normalized, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`Failed to load media (${response.status})`);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  state.mediaObjectUrls.set(normalized, objectUrl);
+
+  if (state.mediaObjectUrls.size > MAX_MEDIA_CACHE_ITEMS) {
+    const oldest = state.mediaObjectUrls.entries().next().value;
+    if (oldest) {
+      const [oldPath, oldUrl] = oldest;
+      URL.revokeObjectURL(oldUrl);
+      state.mediaObjectUrls.delete(oldPath);
+    }
+  }
+
+  return objectUrl;
+}
+
+async function preloadImageSource(path) {
+  const source = await resolveMediaSource(path);
+  if (!source) return null;
+
+  await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Image failed to load"));
+    img.src = source;
+  });
+
+  return source;
 }
 
 function showToast(message) {
@@ -331,8 +386,11 @@ function resetToTitleScreen() {
   sessionIdEl.textContent = "--";
   state.ttsAudio.pause();
   state.ttsAudio.removeAttribute("src");
+  delete state.ttsAudio.dataset.sourcePath;
   state.musicAudio.pause();
   state.musicAudio.removeAttribute("src");
+  delete state.musicAudio.dataset.sourcePath;
+  clearMediaCache();
   loadSettings();
   setActionInputState(false);
   showScreen(titleScreen);
@@ -365,10 +423,13 @@ function renderTitleCards(ideas) {
     const image = document.createElement("img");
     image.className = "card-media";
     image.alt = `${idea.title} cover`;
-    const coverPath = normalizePath(idea.cover_image_path);
-    if (coverPath) {
-      image.src = coverPath;
-    }
+    resolveMediaSource(idea.cover_image_path)
+      .then((source) => {
+        if (source) image.src = source;
+      })
+      .catch(() => {
+        // Keep card visible even if cover preloading fails.
+      });
 
     const body = document.createElement("div");
     body.className = "card-body";
@@ -451,27 +512,43 @@ async function loadTitleIdeas() {
   }
 }
 
-function isSameAudioSource(audio, source) {
-  if (!audio.src) return false;
-  try {
-    return (
-      new URL(audio.src).pathname === new URL(source, window.location.origin).pathname
-    );
-  } catch (_err) {
-    return audio.src.endsWith(source);
-  }
+async function waitForAudioBuffer(audio, timeoutMs = 4000) {
+  if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+  await new Promise((resolve) => {
+    const cleanup = () => {
+      audio.removeEventListener("canplaythrough", onReady);
+      audio.removeEventListener("loadeddata", onReady);
+      window.clearTimeout(timer);
+    };
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+    audio.addEventListener("canplaythrough", onReady, { once: true });
+    audio.addEventListener("loadeddata", onReady, { once: true });
+    audio.load();
+  });
 }
 
 async function playAudio(audio, path, options = {}) {
-  const { restart = false } = options;
+  const { restart = false, waitForBuffer = false } = options;
   if (!path) return;
-  const source = normalizePath(path);
+  const normalizedPath = normalizePath(path);
+  const source = await resolveMediaSource(path);
   if (!source) return;
-  const sameSource = isSameAudioSource(audio, source);
+  const sameSource = audio.dataset.sourcePath === normalizedPath;
   if (!sameSource) {
     audio.src = source;
+    audio.dataset.sourcePath = normalizedPath;
   } else if (restart) {
     audio.currentTime = 0;
+  }
+  if (waitForBuffer) {
+    await waitForAudioBuffer(audio);
   }
   try {
     await audio.play();
@@ -494,9 +571,16 @@ async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
   if (forceMusic || state.currentMusicPath !== musicPath) {
     state.currentMusicPath = musicPath;
     if (!state.musicMuted) {
-      await playAudio(state.musicAudio, musicPath, { restart: forceMusic });
+      await playAudio(state.musicAudio, musicPath, {
+        restart: forceMusic,
+        waitForBuffer: true,
+      });
     } else {
-      state.musicAudio.src = normalizePath(musicPath);
+      const source = await resolveMediaSource(musicPath);
+      if (source) {
+        state.musicAudio.src = source;
+        state.musicAudio.dataset.sourcePath = normalizePath(musicPath);
+      }
     }
   }
 }
@@ -523,7 +607,7 @@ function setMediaDisplay(mediaType) {
   }
 }
 
-function renderScene(scene) {
+async function renderScene(scene) {
   updateTopStatus();
   state.currentTtsPath = scene.tts_path || null;
   renderSceneText(scene.text_story || "");
@@ -541,7 +625,7 @@ function renderScene(scene) {
     return;
   }
 
-  const imageSource = normalizePath(scene.image_path);
+  const imageSource = await preloadImageSource(scene.image_path);
   if (imageSource) {
     sceneImage.src = imageSource;
     sceneImageFallback.classList.add("hidden");
@@ -580,7 +664,7 @@ async function startGame(storyText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || data.initial_script?.skills || [], data.skill_delta_this_turn || []);
 
-    renderScene({
+    await renderScene({
       ...data.initial_scene,
       media_type: "image",
       image_path: data.initial_media?.image_path,
@@ -637,7 +721,7 @@ async function submitAction(actionText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || [], data.skill_delta_this_turn || []);
 
-    renderScene(data.scene || {});
+    await renderScene(data.scene || {});
     state.transitionHints = extractHintTexts(data.hints);
 
     showScreen(sceneScreen);
@@ -737,7 +821,7 @@ musicToggle.addEventListener("click", () => {
   persistSettings();
 
   if (!state.musicMuted && state.currentMusicPath) {
-    playAudio(state.musicAudio, state.currentMusicPath);
+    playAudio(state.musicAudio, state.currentMusicPath, { waitForBuffer: true });
   }
 });
 
