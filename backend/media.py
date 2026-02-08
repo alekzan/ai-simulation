@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
@@ -10,6 +12,7 @@ from google import genai
 from google.genai import types
 
 from backend.clients import get_genai_client
+from backend.ephemeral_media import delete_media_by_path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -59,6 +62,8 @@ def _resolve_media_path(path: str | Path) -> Optional[Path]:
 
 def delete_media_files(paths: list[str | Path]) -> None:
     for path in paths:
+        if isinstance(path, str) and delete_media_by_path(path):
+            continue
         resolved = _resolve_media_path(path)
         if resolved is None:
             continue
@@ -141,6 +146,58 @@ def _write_wav(path: Path, pcm: bytes, channels: int = 1, rate: int = 24000, sam
         wf.writeframes(pcm)
 
 
+def _wav_bytes(pcm: bytes, channels: int = 1, rate: int = 24000, sample_width: int = 2) -> bytes:
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)
+    return buffer.getvalue()
+
+
+def generate_scene_image_bytes(
+    prompt: str,
+    api_key: Optional[str] = None,
+    aspect_ratio: str = "16:9",
+) -> bytes:
+    client = get_genai_client(api_key=api_key)
+
+    chat = client.chats.create(
+        model="gemini-2.5-flash-image",
+        config=types.GenerateContentConfig(
+            response_modalities=["TEXT", "IMAGE"],
+            image_config=types.ImageConfig(
+                aspect_ratio=aspect_ratio,
+            ),
+        ),
+    )
+
+    response = chat.send_message(prompt)
+
+    for part in response.parts:
+        if part.text is not None:
+            continue
+        inline = getattr(part, "inline_data", None)
+        if inline is not None and getattr(inline, "data", None):
+            return inline.data
+        img = part.as_image()
+        if img is None:
+            continue
+        # Gemini SDK Image.save supports a file path (not PIL-style format kwargs).
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+        try:
+            img.save(str(tmp_path))
+            return tmp_path.read_bytes()
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    raise RuntimeError("No image found in response.parts")
+
+
 def generate_tts(text: str, filename: str = "narrator.wav", api_key: Optional[str] = None) -> Path:
     client = get_genai_client(api_key=api_key)
 
@@ -169,12 +226,53 @@ def generate_tts(text: str, filename: str = "narrator.wav", api_key: Optional[st
     return _relative_path(out_path)
 
 
+def generate_tts_bytes(text: str, api_key: Optional[str] = None) -> bytes:
+    client = get_genai_client(api_key=api_key)
+
+    tts_text = text if text.strip().lower().startswith("say:") else f"Say: {text}"
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-preview-tts",
+        contents=tts_text,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name="Charon",
+                    )
+                )
+            ),
+        ),
+    )
+
+    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    return _wav_bytes(audio_data)
+
+
 async def _generate_music_async(
     prompt: str,
     filename: str = "music.wav",
     duration_seconds: int = 20,
     api_key: Optional[str] = None,
 ) -> Path:
+    pcm_buffer = await _generate_music_pcm_async(
+        prompt=prompt,
+        duration_seconds=duration_seconds,
+        api_key=api_key,
+    )
+
+    _ensure_dir(AUDIO_DIR)
+    out_path = AUDIO_DIR / filename
+    _write_wav(out_path, pcm_buffer, channels=2, rate=48000, sample_width=2)
+    return _relative_path(out_path)
+
+
+async def _generate_music_pcm_async(
+    prompt: str,
+    duration_seconds: int = 20,
+    api_key: Optional[str] = None,
+) -> bytes:
     client = get_genai_client(api_version="v1alpha", api_key=api_key)
 
     sample_rate = 48000
@@ -214,10 +312,7 @@ async def _generate_music_async(
 
         await session.stop()
 
-    _ensure_dir(AUDIO_DIR)
-    out_path = AUDIO_DIR / filename
-    _write_wav(out_path, bytes(pcm_buffer), channels=channels, rate=sample_rate, sample_width=sample_width)
-    return _relative_path(out_path)
+    return bytes(pcm_buffer)
 
 
 def generate_music(
@@ -237,6 +332,26 @@ def generate_music(
         ).result()
 
     return asyncio.run(_generate_music_async(prompt, filename, duration_seconds, api_key))
+
+
+def generate_music_bytes(
+    prompt: str,
+    duration_seconds: int = 20,
+    api_key: Optional[str] = None,
+) -> bytes:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        pcm = asyncio.run_coroutine_threadsafe(
+            _generate_music_pcm_async(prompt, duration_seconds, api_key), loop
+        ).result()
+    else:
+        pcm = asyncio.run(_generate_music_pcm_async(prompt, duration_seconds, api_key))
+
+    return _wav_bytes(pcm, channels=2, rate=48000, sample_width=2)
 
 
 def _generate_first_frame(prompt: str, api_key: Optional[str] = None) -> types.Image:

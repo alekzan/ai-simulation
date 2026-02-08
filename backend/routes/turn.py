@@ -13,13 +13,22 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import get_session, save_session
+from backend.ephemeral_media import (
+    EPHEMERAL_IMAGE_TTL_SECONDS,
+    EPHEMERAL_MUSIC_TTL_SECONDS,
+    EPHEMERAL_TTS_TTL_SECONDS,
+    build_ephemeral_path,
+    prune_expired_media,
+    store_media,
+)
 from backend.media import (
     cleanup_expired_media,
     delete_media_files,
     generate_ending_video,
-    generate_music,
+    generate_music_bytes,
     generate_scene_image,
-    generate_tts,
+    generate_scene_image_bytes,
+    generate_tts_bytes,
 )
 from backend.prompts.narrator_director import STATIC_PROMPT
 from backend.request_auth import get_request_api_key, missing_api_key_response
@@ -413,6 +422,7 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
     if not api_key:
         return missing_api_key_response()
     cleanup_expired_media()
+    prune_expired_media()
 
     record = get_session(payload.session_id)
     if record is None:
@@ -617,7 +627,6 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
     )
 
     # Generate media in parallel
-    session_slug = _session_slug(payload.session_id)
     media_paths: Dict[str, Optional[str]] = {
         "image_path": None,
         "video_path": None,
@@ -626,12 +635,12 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
     }
     try:
         if scene_media_type == "video":
+            session_slug = _session_slug(payload.session_id)
             ending_frame_path = generate_scene_image(
                 ending_image_prompt or parsed.next_scene.media_prompt,
                 f"{session_slug}_ending_frame_{next_turn_number}.png",
                 api_key=api_key,
             )
-            media_paths["image_path"] = str(ending_frame_path)
             ending_prompt = _build_ending_video_prompt(
                 parsed.next_scene.text_story,
                 ending_video_prompt or parsed.next_scene.media_prompt,
@@ -642,35 +651,44 @@ def next_turn(payload: TurnRequest, background_tasks: BackgroundTasks, request: 
                 Path(ending_frame_path),
                 api_key=api_key,
             )
+            delete_media_files([ending_frame_path])
             media_paths["video_path"] = str(video_path)
         else:
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures: Dict[str, Any] = {}
                 if scene_media_type == "image":
                     futures["image_path"] = executor.submit(
-                        generate_scene_image,
+                        generate_scene_image_bytes,
                         parsed.next_scene.media_prompt,
-                        f"{session_slug}_scene_{next_turn_number}.png",
                         api_key,
                     )
                 futures["tts_path"] = executor.submit(
-                    generate_tts,
+                    generate_tts_bytes,
                     parsed.next_scene.text_story,
-                    f"{session_slug}_tts_{next_turn_number}.wav",
                     api_key,
                 )
                 if parsed.next_scene.music_action == "CHANGE" and parsed.next_scene.music_prompt:
                     futures["music_path"] = executor.submit(
-                        generate_music,
+                        generate_music_bytes,
                         parsed.next_scene.music_prompt,
-                        f"{session_slug}_music_{next_turn_number}.wav",
                         20,
                         api_key,
                     )
 
                 for key, future in futures.items():
                     result = future.result()
-                    media_paths[key] = str(result) if result is not None else None
+                    if result is None:
+                        media_paths[key] = None
+                        continue
+                    if key == "image_path":
+                        token = store_media(result, "image/png", EPHEMERAL_IMAGE_TTL_SECONDS)
+                        media_paths[key] = build_ephemeral_path(token)
+                    elif key == "tts_path":
+                        token = store_media(result, "audio/wav", EPHEMERAL_TTS_TTL_SECONDS)
+                        media_paths[key] = build_ephemeral_path(token)
+                    elif key == "music_path":
+                        token = store_media(result, "audio/wav", EPHEMERAL_MUSIC_TTL_SECONDS)
+                        media_paths[key] = build_ephemeral_path(token)
     except Exception as exc:  # pragma: no cover - surface as API error
         return JSONResponse(
             status_code=500,

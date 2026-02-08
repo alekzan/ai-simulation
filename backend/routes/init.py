@@ -10,7 +10,20 @@ from pydantic import BaseModel
 
 from backend.clients import get_genai_client, get_thinking_config
 from backend.db import create_session, save_session
-from backend.media import cleanup_expired_media, generate_music, generate_scene_image, generate_tts
+from backend.ephemeral_media import (
+    EPHEMERAL_IMAGE_TTL_SECONDS,
+    EPHEMERAL_MUSIC_TTL_SECONDS,
+    EPHEMERAL_TTS_TTL_SECONDS,
+    build_ephemeral_path,
+    prune_expired_media,
+    store_media,
+)
+from backend.media import (
+    cleanup_expired_media,
+    generate_music_bytes,
+    generate_scene_image_bytes,
+    generate_tts_bytes,
+)
 from backend.prompts.initial_script import SYSTEM_INSTRUCTION
 from backend.request_auth import get_request_api_key, missing_api_key_response
 from backend.schemas import InitialScriptOutput
@@ -31,16 +44,13 @@ def _dump_model(model: BaseModel) -> dict:
     return model.dict()
 
 
-def _session_slug(session_id: str) -> str:
-    return session_id.replace("-", "")
-
-
 @router.post("/init")
 def init_game(payload: InitRequest, request: Request) -> dict:
     api_key = get_request_api_key(request)
     if not api_key:
         return missing_api_key_response()
     cleanup_expired_media()
+    prune_expired_media()
 
     target_turns_hint = {
         "SHORT": 10,
@@ -118,9 +128,7 @@ def init_game(payload: InitRequest, request: Request) -> dict:
     )
 
     session_id = create_session(session_state)
-    session_slug = _session_slug(session_id)
-
-    # Generate initial media in parallel using session-scoped filenames.
+    # Generate initial media in parallel using ephemeral storage.
     media_paths: Dict[str, Optional[str]] = {
         "image_path": None,
         "video_path": None,
@@ -131,27 +139,35 @@ def init_game(payload: InitRequest, request: Request) -> dict:
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures: Dict[str, Any] = {}
             futures["image_path"] = executor.submit(
-                generate_scene_image,
+                generate_scene_image_bytes,
                 initial_scene.image_prompt,
-                f"{session_slug}_scene_1.png",
                 api_key,
             )
             futures["tts_path"] = executor.submit(
-                generate_tts,
+                generate_tts_bytes,
                 initial_scene.text_story,
-                f"{session_slug}_tts_1.wav",
                 api_key,
             )
             futures["music_path"] = executor.submit(
-                generate_music,
+                generate_music_bytes,
                 initial_scene.music_prompt,
-                f"{session_slug}_music_1.wav",
                 20,
                 api_key,
             )
             for key, future in futures.items():
                 result = future.result()
-                media_paths[key] = str(result) if result is not None else None
+                if result is None:
+                    media_paths[key] = None
+                    continue
+                if key == "image_path":
+                    token = store_media(result, "image/png", EPHEMERAL_IMAGE_TTL_SECONDS)
+                    media_paths[key] = build_ephemeral_path(token)
+                elif key == "tts_path":
+                    token = store_media(result, "audio/wav", EPHEMERAL_TTS_TTL_SECONDS)
+                    media_paths[key] = build_ephemeral_path(token)
+                elif key == "music_path":
+                    token = store_media(result, "audio/wav", EPHEMERAL_MUSIC_TTL_SECONDS)
+                    media_paths[key] = build_ephemeral_path(token)
     except Exception as exc:  # pragma: no cover - surface as API error
         return JSONResponse(
             status_code=500,
