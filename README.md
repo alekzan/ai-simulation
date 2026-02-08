@@ -4,7 +4,7 @@ An autonomous, multimodal narrative simulation powered by **Gemini 3**.
 
 This project is **not** a chatbot and not a prompt wrapper. It is a stateful simulation engine where Gemini acts as a **Narrator Director**, evolving a world over time with rules, consequences, memory, and multimodal outputs.
 
-## What This Is
+## What This Is 🎮
 
 AI-Driven Simulation Engine is an interactive first-person simulation where:
 
@@ -15,7 +15,7 @@ AI-Driven Simulation Engine is an interactive first-person simulation where:
 
 The goal is cinematic immersion with product-level rigor: deterministic backend behavior, strict schema validation, persistent state, and low-latency multimodal generation.
 
-## Quick Start (Local)
+## Quick Start (Local) 🚀
 
 1. Create and activate a virtual environment.
 
@@ -36,17 +36,23 @@ pip install -r requirements.txt
 uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-4. Open the app.
+4. Create your local env file (optional but recommended).
+
+```bash
+cp .env.example .env
+```
+
+5. Open the app.
 
 ```text
 http://127.0.0.1:8000
 ```
 
-5. Enter your Gemini API key in the app’s API key screen.
+6. Enter your Gemini API key in the app’s API key screen.
 
 Important: the backend expects a per-request key (`X-Gemini-Api-Key`). The frontend handles this automatically after you enter your key.
 
-## Why Gemini
+## Why Gemini 🧠
 
 This project leans on Gemini because it can:
 
@@ -61,7 +67,7 @@ The design intentionally avoids:
 - Basic RAG templates
 - Generic chat UX patterns
 
-## Key Features
+## Key Features ✨
 
 ### Narrative Simulation (Not Chat)
 
@@ -96,7 +102,7 @@ Media generation is orchestrated in parallel where appropriate to reduce perceiv
 - SQLite is the source of truth per session
 - State includes scenes, skills, inventory, memory, media paths, and usage metrics
 
-## How the Simulation Loop Works
+## How the Simulation Loop Works 🔁
 
 1. Title selection
 - Gemini generates multiple story options with title + cover
@@ -113,7 +119,7 @@ Media generation is orchestrated in parallel where appropriate to reduce perceiv
 4. Long-run continuity
 - Story memory summarization keeps long sessions coherent
 
-## API Key Behavior
+## API Key Behavior 🔐
 
 ### Frontend flow (recommended)
 
@@ -130,7 +136,7 @@ curl -X POST http://127.0.0.1:8000/api/title-options-with-covers \
 
 If key is missing, backend returns `401 MISSING_API_KEY`.
 
-## Core Endpoints
+## Core Endpoints 🧩
 
 - `GET /health`
 - `POST /api/title-options-with-covers`
@@ -138,7 +144,7 @@ If key is missing, backend returns `401 MISSING_API_KEY`.
 - `POST /api/turn`
 - `GET /api/simulation-metrics/{session_id}`
 
-## Production Notes
+## Production Notes 🌐
 
 - Run Uvicorn behind Nginx
 - Terminate HTTPS at Nginx (Let’s Encrypt)
@@ -150,25 +156,26 @@ Minimal app process command:
 uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-## Environment Variables
+## Environment Variables ⚙️
 
-Most users can run without `.env`, but these are available:
+Use `.env.example` as your template. These are the main variables and what they control:
 
-- `APP_ENV`
-- `SIM_DB_PATH`
-- `TITLE_DEV_FIXED_OPTIONS`
-- `GEMINI_THINKING_LEVEL`
-- `GEMINI_FORCE_DEV_THINKING_LEVEL`
-- `MEDIA_IMAGE_RETENTION_SECONDS`
-- `MEDIA_AUDIO_RETENTION_SECONDS`
-- `MEDIA_VIDEO_RETENTION_SECONDS`
-- `EPHEMERAL_IMAGE_FORMAT`
-- `EPHEMERAL_IMAGE_QUALITY`
-- `EPHEMERAL_IMAGE_MAX_DIM`
-- `ENDING_DEBUG_TOKEN`
-- `GAMEOVER_DEBUG_TOKEN`
+- `GEMINI_API_KEY` / `GOOGLE_API_KEY`: optional server-side fallback keys. Usually not needed when users type key in UI.
+- `APP_ENV`: environment mode. Use `development` locally and `production` on live deploy.
+- `SIM_DB_PATH`: path to the SQLite database file used for session state.
+- `TITLE_DEV_FIXED_OPTIONS`: when `true` in dev, title cards are static to save generation time/cost.
+- `GEMINI_THINKING_LEVEL`: explicit thinking level override for Gemini calls.
+- `GEMINI_FORCE_DEV_THINKING_LEVEL`: if `true`, development sticks to deterministic low-cost thinking defaults.
+- `MEDIA_IMAGE_RETENTION_SECONDS`: TTL for image cleanup on disk (`0` = keep images).
+- `MEDIA_AUDIO_RETENTION_SECONDS`: TTL for generated audio cleanup.
+- `MEDIA_VIDEO_RETENTION_SECONDS`: TTL for generated ending video cleanup.
+- `EPHEMERAL_IMAGE_FORMAT`: output format for optimized generated images (`WEBP` or `JPEG`).
+- `EPHEMERAL_IMAGE_QUALITY`: compression quality for generated images.
+- `EPHEMERAL_IMAGE_MAX_DIM`: max width/height cap for generated images.
+- `ENDING_DEBUG_TOKEN`: dev token to force ending workflow for testing.
+- `GAMEOVER_DEBUG_TOKEN`: dev token to force game-over workflow for testing.
 
-## Troubleshooting
+## Troubleshooting 🛠️
 
 ### 401 `MISSING_API_KEY`
 
@@ -185,7 +192,7 @@ Most users can run without `.env`, but these are available:
 - Keep compressed image settings enabled.
 - Avoid over-aggressive media deletion while sessions are active.
 
-## Final Note
+## Final Note 🎬
 
 This project explores what happens when AI is treated not as a responder, but as a director of reality.
 
