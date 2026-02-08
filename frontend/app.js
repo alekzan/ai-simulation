@@ -65,11 +65,10 @@ const state = {
   simulationMetrics: null,
   ttsAudio: new Audio(),
   musicAudio: new Audio(),
-  mediaObjectUrls: new Map(),
+  flowToken: 0,
 };
 const CUSTOM_ACTION_DEFAULT_PLACEHOLDER =
   "I steady my breath and move toward the sound...";
-const MAX_MEDIA_CACHE_ITEMS = 80;
 
 state.musicAudio.loop = true;
 const defaultTurnLoadingHints = [
@@ -84,57 +83,9 @@ function normalizePath(path) {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-function isEphemeralPath(path) {
-  const normalized = normalizePath(path);
-  return !!normalized && normalized.startsWith("/ephemeral/");
-}
-
-function clearMediaCache() {
-  state.mediaObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-  state.mediaObjectUrls.clear();
-}
-
-async function resolveMediaSource(path) {
-  const normalized = normalizePath(path);
-  if (!normalized) return null;
-  if (!isEphemeralPath(normalized)) return normalized;
-
-  const cached = state.mediaObjectUrls.get(normalized);
-  if (cached) return cached;
-
-  const response = await fetch(normalized, { cache: "force-cache" });
-  if (!response.ok) {
-    throw new Error(`Failed to load media (${response.status})`);
-  }
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  state.mediaObjectUrls.set(normalized, objectUrl);
-
-  if (state.mediaObjectUrls.size > MAX_MEDIA_CACHE_ITEMS) {
-    const oldest = state.mediaObjectUrls.entries().next().value;
-    if (oldest) {
-      const [oldPath, oldUrl] = oldest;
-      URL.revokeObjectURL(oldUrl);
-      state.mediaObjectUrls.delete(oldPath);
-    }
-  }
-
-  return objectUrl;
-}
-
-async function preloadImageSource(path) {
-  const source = await resolveMediaSource(path);
-  if (!source) return null;
-
-  await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.decoding = "async";
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Image failed to load"));
-    img.src = source;
-  });
-
-  return source;
+function nextFlowToken() {
+  state.flowToken += 1;
+  return state.flowToken;
 }
 
 function showToast(message) {
@@ -367,6 +318,7 @@ function setActionInputState(disabled) {
 }
 
 function resetToTitleScreen() {
+  nextFlowToken();
   resetModal.classList.add("hidden");
   metricsModal.classList.add("hidden");
   state.sessionId = null;
@@ -390,7 +342,6 @@ function resetToTitleScreen() {
   state.musicAudio.pause();
   state.musicAudio.removeAttribute("src");
   delete state.musicAudio.dataset.sourcePath;
-  clearMediaCache();
   loadSettings();
   setActionInputState(false);
   showScreen(titleScreen);
@@ -423,13 +374,10 @@ function renderTitleCards(ideas) {
     const image = document.createElement("img");
     image.className = "card-media";
     image.alt = `${idea.title} cover`;
-    resolveMediaSource(idea.cover_image_path)
-      .then((source) => {
-        if (source) image.src = source;
-      })
-      .catch(() => {
-        // Keep card visible even if cover preloading fails.
-      });
+    const coverPath = normalizePath(idea.cover_image_path);
+    if (coverPath) {
+      image.src = coverPath;
+    }
 
     const body = document.createElement("div");
     body.className = "card-body";
@@ -495,6 +443,7 @@ async function fetchSimulationMetrics(sessionId) {
 }
 
 async function loadTitleIdeas() {
+  const flowToken = nextFlowToken();
   setLoading(
     "Calibrating simulation scenarios...",
     [],
@@ -504,15 +453,17 @@ async function loadTitleIdeas() {
 
   try {
     const data = await fetchJson(`${API_BASE}/api/title-options-with-covers`);
+    if (flowToken !== state.flowToken) return;
     renderTitleCards(data.ideas || []);
     showScreen(titleScreen);
   } catch (err) {
+    if (flowToken !== state.flowToken) return;
     showToast(err.message || "Could not load title ideas.");
     showScreen(titleScreen);
   }
 }
 
-async function waitForAudioBuffer(audio, timeoutMs = 4000) {
+async function waitForAudioBuffer(audio, timeoutMs = 1200) {
   if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
   await new Promise((resolve) => {
     const cleanup = () => {
@@ -535,20 +486,21 @@ async function waitForAudioBuffer(audio, timeoutMs = 4000) {
 }
 
 async function playAudio(audio, path, options = {}) {
-  const { restart = false, waitForBuffer = false } = options;
+  const { restart = false, waitForBuffer = false, flowToken = null } = options;
+  if (flowToken !== null && flowToken !== state.flowToken) return;
   if (!path) return;
   const normalizedPath = normalizePath(path);
-  const source = await resolveMediaSource(path);
-  if (!source) return;
+  if (!normalizedPath) return;
   const sameSource = audio.dataset.sourcePath === normalizedPath;
   if (!sameSource) {
-    audio.src = source;
+    audio.src = normalizedPath;
     audio.dataset.sourcePath = normalizedPath;
   } else if (restart) {
     audio.currentTime = 0;
   }
   if (waitForBuffer) {
     await waitForAudioBuffer(audio);
+    if (flowToken !== null && flowToken !== state.flowToken) return;
   }
   try {
     await audio.play();
@@ -557,13 +509,14 @@ async function playAudio(audio, path, options = {}) {
   }
 }
 
-async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
+async function playSceneAudio(ttsPath, musicPath, forceMusic = false, flowToken = null) {
+  if (flowToken !== null && flowToken !== state.flowToken) return;
   if (ttsPath) {
     state.currentTtsPath = ttsPath;
   }
 
   if (state.currentTtsPath && !state.ttsMuted) {
-    await playAudio(state.ttsAudio, state.currentTtsPath, { restart: true });
+    await playAudio(state.ttsAudio, state.currentTtsPath, { restart: true, flowToken });
   }
 
   if (!musicPath) return;
@@ -574,13 +527,11 @@ async function playSceneAudio(ttsPath, musicPath, forceMusic = false) {
       await playAudio(state.musicAudio, musicPath, {
         restart: forceMusic,
         waitForBuffer: true,
+        flowToken,
       });
     } else {
-      const source = await resolveMediaSource(musicPath);
-      if (source) {
-        state.musicAudio.src = source;
-        state.musicAudio.dataset.sourcePath = normalizePath(musicPath);
-      }
+      state.musicAudio.src = normalizePath(musicPath);
+      state.musicAudio.dataset.sourcePath = normalizePath(musicPath);
     }
   }
 }
@@ -607,7 +558,7 @@ function setMediaDisplay(mediaType) {
   }
 }
 
-async function renderScene(scene) {
+function renderScene(scene) {
   updateTopStatus();
   state.currentTtsPath = scene.tts_path || null;
   renderSceneText(scene.text_story || "");
@@ -625,7 +576,7 @@ async function renderScene(scene) {
     return;
   }
 
-  const imageSource = await preloadImageSource(scene.image_path);
+  const imageSource = normalizePath(scene.image_path);
   if (imageSource) {
     sceneImage.src = imageSource;
     sceneImageFallback.classList.add("hidden");
@@ -641,6 +592,7 @@ async function startGame(storyText) {
     return;
   }
 
+  const flowToken = nextFlowToken();
   setLoading(
     "Initializing your simulation instance...",
     [],
@@ -652,6 +604,7 @@ async function startGame(storyText) {
       story_text: storyText.trim(),
       game_length_mode: state.gameLength,
     });
+    if (flowToken !== state.flowToken) return;
 
     state.sessionId = data.session_id;
     state.turnNumber = 1;
@@ -664,7 +617,7 @@ async function startGame(storyText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || data.initial_script?.skills || [], data.skill_delta_this_turn || []);
 
-    await renderScene({
+    renderScene({
       ...data.initial_scene,
       media_type: "image",
       image_path: data.initial_media?.image_path,
@@ -677,9 +630,11 @@ async function startGame(storyText) {
     await playSceneAudio(
       data.initial_media?.tts_path,
       data.initial_media?.music_path,
-      true
+      true,
+      flowToken
     );
   } catch (err) {
+    if (flowToken !== state.flowToken) return;
     showToast(err.message || "Failed to initialize the simulation.");
     showScreen(titleScreen);
   }
@@ -687,6 +642,7 @@ async function startGame(storyText) {
 
 async function submitAction(actionText) {
   if (!state.sessionId || !actionText || state.gameOver) return;
+  const flowToken = nextFlowToken();
 
   state.ttsAudio.pause();
   state.ttsAudio.currentTime = 0;
@@ -701,6 +657,7 @@ async function submitAction(actionText) {
       session_id: state.sessionId,
       action: actionText,
     });
+    if (flowToken !== state.flowToken) return;
     const isEndingVideo = data.scene?.media_type === "video";
     if (isEndingVideo) {
       state.ttsAudio.pause();
@@ -721,7 +678,7 @@ async function submitAction(actionText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || [], data.skill_delta_this_turn || []);
 
-    await renderScene(data.scene || {});
+    renderScene(data.scene || {});
     state.transitionHints = extractHintTexts(data.hints);
 
     showScreen(sceneScreen);
@@ -737,10 +694,12 @@ async function submitAction(actionText) {
         data.scene?.music_action === "CHANGE"
           ? data.scene?.music_path
           : state.currentMusicPath,
-        data.scene?.music_action === "CHANGE"
+        data.scene?.music_action === "CHANGE",
+        flowToken
       );
     }
   } catch (err) {
+    if (flowToken !== state.flowToken) return;
     showToast(err.message || "Failed to process turn.");
     showScreen(sceneScreen);
   }
