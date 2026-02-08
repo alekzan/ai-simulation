@@ -197,11 +197,11 @@ def generate_scene_image_bytes(
     aspect_ratio: str = "16:9",
 ) -> tuple[bytes, str]:
     def _encode_image_bytes(raw: bytes) -> tuple[bytes, str]:
-        output_format = os.getenv("EPHEMERAL_IMAGE_FORMAT", "JPEG").strip().upper()
+        output_format = os.getenv("EPHEMERAL_IMAGE_FORMAT", "WEBP").strip().upper()
         if output_format not in {"JPEG", "WEBP"}:
-            output_format = "JPEG"
-        quality = int(os.getenv("EPHEMERAL_IMAGE_QUALITY", "72"))
-        max_dim = int(os.getenv("EPHEMERAL_IMAGE_MAX_DIM", "1280"))
+            output_format = "WEBP"
+        quality = int(os.getenv("EPHEMERAL_IMAGE_QUALITY", "60"))
+        max_dim = int(os.getenv("EPHEMERAL_IMAGE_MAX_DIM", "1024"))
 
         try:
             from PIL import Image
@@ -315,21 +315,7 @@ def generate_tts_bytes(text: str, api_key: Optional[str] = None) -> bytes:
     )
 
     audio_data = response.candidates[0].content.parts[0].inline_data.data
-    tts_rate = int(os.getenv("TTS_OUTPUT_RATE", "16000"))
-    optimized_pcm, optimized_channels, optimized_rate = _resample_pcm(
-        audio_data,
-        input_rate=24000,
-        input_channels=1,
-        output_rate=tts_rate,
-        output_channels=1,
-        sample_width=2,
-    )
-    return _wav_bytes(
-        optimized_pcm,
-        channels=optimized_channels,
-        rate=optimized_rate,
-        sample_width=2,
-    )
+    return _wav_bytes(audio_data)
 
 
 async def _generate_music_async(
