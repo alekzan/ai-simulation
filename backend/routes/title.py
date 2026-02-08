@@ -169,10 +169,10 @@ def title_options_with_covers(request: Request) -> dict:
                 for idea in parsed.ideas
             }
             for idea_id, future in futures.items():
-                image_bytes = future.result()
+                image_bytes, image_mime = future.result()
                 token = store_media(
                     image_bytes,
-                    "image/png",
+                    image_mime,
                     EPHEMERAL_TITLE_IMAGE_TTL_SECONDS,
                 )
                 cover_paths[idea_id] = build_ephemeral_path(token)

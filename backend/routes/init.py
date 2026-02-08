@@ -160,7 +160,8 @@ def init_game(payload: InitRequest, request: Request) -> dict:
                     media_paths[key] = None
                     continue
                 if key == "image_path":
-                    token = store_media(result, "image/png", EPHEMERAL_IMAGE_TTL_SECONDS)
+                    image_bytes, image_mime = result
+                    token = store_media(image_bytes, image_mime, EPHEMERAL_IMAGE_TTL_SECONDS)
                     media_paths[key] = build_ephemeral_path(token)
                 elif key == "tts_path":
                     token = store_media(result, "audio/wav", EPHEMERAL_TTS_TTL_SECONDS)

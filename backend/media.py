@@ -158,7 +158,7 @@ def _wav_bytes(pcm: bytes, channels: int = 1, rate: int = 24000, sample_width: i
     return buffer.getvalue()
 
 
-def _downsample_music_pcm(
+def _resample_pcm(
     pcm: bytes,
     input_rate: int = 48000,
     input_channels: int = 2,
@@ -195,7 +195,42 @@ def generate_scene_image_bytes(
     prompt: str,
     api_key: Optional[str] = None,
     aspect_ratio: str = "16:9",
-) -> bytes:
+) -> tuple[bytes, str]:
+    def _encode_image_bytes(raw: bytes) -> tuple[bytes, str]:
+        output_format = os.getenv("EPHEMERAL_IMAGE_FORMAT", "JPEG").strip().upper()
+        if output_format not in {"JPEG", "WEBP"}:
+            output_format = "JPEG"
+        quality = int(os.getenv("EPHEMERAL_IMAGE_QUALITY", "72"))
+        max_dim = int(os.getenv("EPHEMERAL_IMAGE_MAX_DIM", "1280"))
+
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(raw)) as img:
+                # Force deterministic browser-friendly format and cap large dimensions.
+                if max(img.size) > max_dim:
+                    resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+                    img.thumbnail((max_dim, max_dim), resampling)
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+
+                buffer = io.BytesIO()
+                if output_format == "WEBP":
+                    img.save(buffer, format="WEBP", quality=quality, method=4)
+                    return buffer.getvalue(), "image/webp"
+
+                img.save(
+                    buffer,
+                    format="JPEG",
+                    quality=quality,
+                    optimize=True,
+                    progressive=True,
+                )
+                return buffer.getvalue(), "image/jpeg"
+        except Exception:
+            # Safe fallback: keep original bytes if optimization path is unavailable.
+            return raw, "image/png"
+
     client = get_genai_client(api_key=api_key)
 
     chat = client.chats.create(
@@ -215,7 +250,7 @@ def generate_scene_image_bytes(
             continue
         inline = getattr(part, "inline_data", None)
         if inline is not None and getattr(inline, "data", None):
-            return inline.data
+            return _encode_image_bytes(inline.data)
         img = part.as_image()
         if img is None:
             continue
@@ -224,7 +259,7 @@ def generate_scene_image_bytes(
             tmp_path = Path(tmp_file.name)
         try:
             img.save(str(tmp_path))
-            return tmp_path.read_bytes()
+            return _encode_image_bytes(tmp_path.read_bytes())
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -280,7 +315,21 @@ def generate_tts_bytes(text: str, api_key: Optional[str] = None) -> bytes:
     )
 
     audio_data = response.candidates[0].content.parts[0].inline_data.data
-    return _wav_bytes(audio_data)
+    tts_rate = int(os.getenv("TTS_OUTPUT_RATE", "16000"))
+    optimized_pcm, optimized_channels, optimized_rate = _resample_pcm(
+        audio_data,
+        input_rate=24000,
+        input_channels=1,
+        output_rate=tts_rate,
+        output_channels=1,
+        sample_width=2,
+    )
+    return _wav_bytes(
+        optimized_pcm,
+        channels=optimized_channels,
+        rate=optimized_rate,
+        sample_width=2,
+    )
 
 
 async def _generate_music_async(
@@ -385,7 +434,7 @@ def generate_music_bytes(
         pcm = asyncio.run(_generate_music_pcm_async(prompt, duration_seconds, api_key))
 
     # Reduce transport size for smoother browser playback on production links.
-    optimized_pcm, optimized_channels, optimized_rate = _downsample_music_pcm(
+    optimized_pcm, optimized_channels, optimized_rate = _resample_pcm(
         pcm,
         input_rate=48000,
         input_channels=2,

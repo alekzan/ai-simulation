@@ -86,31 +86,6 @@ function normalizePath(path) {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-async function warmImage(path, timeoutMs = 12000) {
-  const source = normalizePath(path);
-  if (!source) return null;
-  await new Promise((resolve) => {
-    const img = new Image();
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
-    const timer = window.setTimeout(finish, timeoutMs);
-    img.onload = () => {
-      window.clearTimeout(timer);
-      finish();
-    };
-    img.onerror = () => {
-      window.clearTimeout(timer);
-      finish();
-    };
-    img.src = source;
-  });
-  return source;
-}
-
 function nextFlowToken() {
   state.flowToken += 1;
   return state.flowToken;
@@ -697,11 +672,6 @@ async function startGame(storyText) {
       music_path: data.initial_media?.music_path,
     };
 
-    if (initialScenePayload.image_path) {
-      await warmImage(initialScenePayload.image_path);
-      if (flowToken !== state.flowToken) return;
-    }
-
     renderScene(initialScenePayload);
 
     showScreen(sceneScreen);
@@ -757,13 +727,7 @@ async function submitAction(actionText) {
     setInventory(data.inventory || [], data.inventory_delta_this_turn || []);
     setSkills(data.skills || [], data.skill_delta_this_turn || []);
 
-    const nextScene = data.scene || {};
-    if (nextScene.media_type === "image" && nextScene.image_path) {
-      await warmImage(nextScene.image_path);
-      if (flowToken !== state.flowToken) return;
-    }
-
-    renderScene(nextScene);
+    renderScene(data.scene || {});
     state.transitionHints = extractHintTexts(data.hints);
 
     showScreen(sceneScreen);
